@@ -1,10 +1,10 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleContexts #-}
-module Parsing where
+module SeAn.Lexicon.Parsing where
 
-import Base
-import qualified StdLib as Std
+import SeAn.Lexicon.Base
+import qualified SeAn.Lexicon.StdLib as Std
 import Data.Maybe (catMaybes,maybeToList)
 import Text.ParserCombinators.UU
 import Text.ParserCombinators.UU.BasicInstances

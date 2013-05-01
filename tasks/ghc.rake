@@ -5,15 +5,10 @@ module GHC
     deps   = args.drop(1).map {|arg| project._(:src,:main,:hs,arg.ext('.hs'))}
     file target => deps do
       mkdir_p File.dirname(target)
-      puts ghc = "ghc --make -i#{project._(:src,:main,:hs)} -o #{target} #{source}"
+      puts ghc = "ghc --make -i#{project._(:src,:main,:hs)} -odir #{project._(:target)} -hidir #{project._(:target)} -o #{target} #{source}"
       fail unless system ghc
     end
     with target
-    # extend the clean task
-    project.clean do
-      Dir[project._(:src,:main,:hs,'*.o'),
-          project._(:src,:main,:hs,'*.hi')].each {|file| rm file}
-    end
   end
 end
 

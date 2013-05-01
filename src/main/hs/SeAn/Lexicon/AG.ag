@@ -1,4 +1,4 @@
-module {AG}{}{}
+module {SeAn.Lexicon.AG}{}{}
 
 include "AG/Base.ag"
 include "AG/Printing.ag"

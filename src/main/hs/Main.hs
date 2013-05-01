@@ -1,7 +1,7 @@
-import Base
-import StdLib
-import Parsing
-import Printing
+import SeAn.Lexicon.Base
+import SeAn.Lexicon.StdLib
+import SeAn.Lexicon.Parsing
+import SeAn.Lexicon.Printing
 
 import Data.String.Utils
 import Text.ParserCombinators.UU.Utils (runParser)
