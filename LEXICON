@@ -1,0 +1,67 @@
+Constants from First-Order Logic
+
+AND     : ttt     written as "/\"
+OR      : ttt     written as "\/"
+IMPLIES : ttt     written as "->"
+EQ      : eet     written as "=="
+FORALL  : (et)t   written as "!."
+EXISTS  : (et)t   written as "?."
+IOTA    : (et)e   written as "i."
+
+Compositional Word-Denotations
+
++ n     : et
++ n     = word
++ n_2   : eet
++ n_2   = word
+- nc_2  : et -> et
+- nc_2  = \f.of word f
+- nc_3  : et -> et -> et
+- nc_3  = \f.\g.of word (of f g)
+
++ np    : e
++ np    = word
++ np    : (et)t
++ np    = raise word
+
++ v_1   : et
++ v_1   = word
++ v_2   : eet
++ v_2   = word
++ v_3   : eeet
++ v_3   = word 
+
++ mod_i : !a.(at)at
++ mod_i = \f.\x.f x /\ word x
++ mod_r : !a.(at)at
++ mod_r = \f.\x.f x /\ word f x
+
++ is    : eet
++ is    = \x.\y.x == y
+
++ some  : (et)(et)t
++ some  = \f.\g.?x. f x /\ g x
++ every : (et)(et)t
++ every = \f.\g.!x. f x => g x
++ the   : (et)(et)t
++ the   = \f.\g.ix. f x /\ g x
++ a     : (et)(et)t
++ a     = some
++ poss  : (et)(et)t
++ poss  = some
+
++ of    : et -> et -> et
++ of    : eet -> et -> et
+
+Automatically Applied Functions
+
+@ raise           : e -> (et)t
+@ raise           = \x.\f.f x
+@ raise           : et -> ((et)t)t
+@ raise           = \f.\p.p f
+@ raise           : eet -> ((et)t)((et)t)t
+@ raise           = \f.\p.\q.p (\x.q (\y.f x y))
+@ raise           : eet -> ((et)t)et
+@ raise           = \f.\p.\y.p (\x.f x y)
+@ raise           : eet -> e((et)t)t
+@ raise           = \f.\x.\q.q (\y.f x y)

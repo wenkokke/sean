@@ -1,0 +1,265 @@
+optpragmas
+{
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+}
+
+imports
+{
+import Control.Applicative ((<|>))
+import Data.List (union,delete,(\\))
+import Data.Maybe (fromMaybe)
+import Data.Map (Map)
+import qualified Data.Map
+import qualified Data.Map as Map
+}
+
+-- |Allows types to access themselves.
+attr TyS
+  syn this :: self
+
+-- |Allows types to acces identifier names.
+attr Ident
+  syn name :: Var
+  syn ty   :: MbTy
+  
+sem Ident
+  | Ident lhs.name = @name
+          lhs.ty   = @ty.this
+
+----------------------------------------
+-- hm : Hinley-Milner Type Inference  --
+----------------------------------------
+
+attr Tm MbTy
+  syn hm :: Ty
+  
+sem Tm
+  | Var inst.mbty :: MbTy
+        inst.mbty = @ident.ty <|> Map.lookup @ident.name @lhs.env
+        mbty.fsh  = @lhs.fsh
+        mbty.ftv  = tyPrim
+        mbty.subs = I
+        inst.hm   :: Ty
+        inst.hm   = @mbty.hm
+        hm  .subs = I
+        lhs .hm   = @hm.ins
+        lhs .fsh  = @mbty.fsh
+        
+  | Lam inst.mbty :: MbTy
+        inst.mbty = @ident.ty
+        mbty.fsh  = @lhs.fsh
+        mbty.ftv  = tyPrim
+        mbty.subs = I
+        tm  .env  = Map.insert @ident.name @mbty.hm @lhs.env
+        tm  .fsh  = @mbty.fsh
+        inst.hm   :: Ty
+        inst.hm   = @mbty.hm
+        lhs .hm   = Ty_App @hm.this @tm.hm
+        lhs .fsh  = @tm.fsh
+
+sem MbTy
+  | Just    lhs.hm  = @just.this
+  | Nothing lhs.hm  = Ty_Var (head @lhs.fsh)
+            lhs.fsh = tail @lhs.fsh
+
+----------------------------------------
+-- env : Type Environments            --
+----------------------------------------
+
+-- |Represents the type environment where the algorithm W
+--  can lookup previously inferred types of variables.
+type TyEnv = map {Var} Ty
+
+attr TmS Ident
+  chn env :: TyEnv
+  
+{
+class    HasTyEnv ty where tyEnv :: ty -> TyEnv
+instance HasTyEnv Lx where tyEnv lx = env_Syn_Lx $ wrap_Lx (sem_Lx lx) (inh lx)
+instance HasTyEnv St where tyEnv st = env_Syn_St $ wrap_St (sem_St st) (inh st)
+instance HasTyEnv Tm where tyEnv tm = env_Syn_Tm $ wrap_Tm (sem_Tm tm) (inh tm)
+}
+
+----------------------------------------
+-- fsh : Fresh-Name Generators        --
+----------------------------------------
+
+{
+-- |Represents a stream of fresh type variables. As it is
+--  a stream, it should not be allowed to run out.
+type TyGen = [TyVar]
+}
+{
+-- |Simple implementation of a typename generator which first
+--  enumerates the alphabet, and then continues with numbered types.
+tyGen :: TyGen
+tyGen = ['a'..'z'] \\ tyPrim
+}
+
+attr TmS TyS TyEnv
+  chn fsh :: TyGen
+  
+sem Ident
+  | *   ty  .fsh = tyGen
+        env .fsh = tyGen
+      
+sem Ty
+  | App ty1 .fsh = @lhs.fsh
+        ty2 .fsh = @ty1.fsh
+        lhs .fsh = @ty2.fsh
+        
+sem Tm
+  | App tm1 .fsh = @lhs.fsh
+        tm2 .fsh = @tm1.fsh
+        lhs .fsh = @tm2.fsh
+        
+sem Ss
+  | Cons hd .fsh = @lhs.fsh
+         tl .fsh = @lhs.fsh
+
+{
+class    HasFsh ty    where fsh :: ty -> TyGen
+instance HasFsh Ty    where fsh ty = fsh_Syn_Ty $ wrap_Ty (sem_Ty ty) (inh ty)
+instance HasFsh TyEnv where fsh ty = fsh_Syn_TyEnv $ wrap_TyEnv (sem_TyEnv ty) (inh ty)
+}        
+
+--------------------------------------
+-- sub : Type Substitution          --
+--------------------------------------
+{
+-- |Represents type substitutions.
+data TySubst
+  = I                 -- ^ the identity substitution;
+  | S TyVar Ty        -- ^ substitutes the second argument for the first;
+  | O TySubst TySubst -- ^ substitution composition.
+}
+
+attr TyS TyEnv
+  inh subs :: TySubst
+  syn subd :: self
+  
+sem Ident
+  | *   ty .subs = I
+        env.subs = I
+  
+sem Ty
+  | Var lhs.subd = case @lhs.subs of
+                    I       -> @this
+                    S x  ty -> if @ident==x then ty else @this
+                    O s2 s1 -> subst s2 (subst s1 @this)
+
+{
+class HasSub ty where
+  subst   :: TySubst -> ty -> ty
+  replace :: TyVar -> Ty -> ty -> ty
+  replace a b ty = subst (S a b) ty
+  rename  :: TyVar -> TyVar -> ty -> ty
+  rename  a b ty = replace a (Ty_Var b) ty
+instance HasSub Ty where
+  subst s ty = subd_Syn_Ty $ wrap_Ty (sem_Ty ty) ((inh ty) {subs_Inh_Ty=s})
+instance HasSub TyEnv where
+  subst s ty = fmap (subst s) ty
+}
+
+--------------------------------------
+-- ins : Type Instantiation         --
+--------------------------------------
+
+attr TyS TyEnv
+  syn ins :: self
+
+sem Ty
+  | All loc.new = head @ty.fsh
+        lhs.fsh = tail @ty.fsh
+        loc.ins = rename @ident @new @ty.ins
+
+{
+class    HasIns ty    where ins :: ty -> ty
+instance HasIns Ty    where ins ty = ins_Syn_Ty $ wrap_Ty (sem_Ty ty) (inh ty)
+instance HasIns TyEnv where ins ty = ins_Syn_TyEnv $ wrap_TyEnv (sem_TyEnv ty) (inh ty)
+}
+
+--------------------------------------
+-- gen : Type Generalization        --
+--------------------------------------
+
+attr TyS TyEnv
+  syn gen :: self
+  
+sem Ty
+  | * loc.gen = foldr Ty_All @this (@ftv \\ @lhs.ftv)
+
+{
+class    HasGen ty    where gen :: ty -> ty
+instance HasGen Ty    where gen ty = gen_Syn_Ty $ wrap_Ty (sem_Ty ty) (inh ty)
+instance HasGen TyEnv where gen ty = gen_Syn_TyEnv $ wrap_TyEnv (sem_TyEnv ty) (inh ty)
+}
+
+--------------------------------------
+-- ftv : Free Type Variables        --
+--------------------------------------
+{ 
+-- |Represents the free (or unbound) type variables in an expression.
+type FTV = [TyVar]
+}
+ 
+attr TyS TyEnv
+  chn ftv :: FTV
+  
+sem Ident
+  | * inst.env :: TyEnv
+      inst.env = @lhs.env
+      ty  .ftv = @env.ftv
+
+sem Ty
+  | Var loc.ftv = return @ident
+  | App loc.ftv = @ty1.ftv `union` @ty2.ftv
+  | All loc.ftv = delete @ident @ty.ftv
+  
+{
+class    HasFTV ty    where ftv :: ty -> FTV
+instance HasFTV Ty    where ftv ty = ftv_Syn_Ty $ wrap_Ty (sem_Ty ty) ((inh ty) {fsh_Inh_Ty=[]})
+instance HasFTV TyEnv where ftv ty = ftv_Syn_TyEnv $ wrap_TyEnv (sem_TyEnv ty) ((inh ty) {fsh_Inh_TyEnv=[]})
+}
+
+----------------------------------------
+-- inh : Default Inherited Arguments  --
+----------------------------------------
+{
+class HasInh a b | a -> b where
+  inh :: a -> b
+
+instance HasInh Ty Inh_Ty where
+  inh a = Inh_Ty
+        { fsh_Inh_Ty      = tyGen \\ ftv a
+        , ftv_Inh_Ty      = tyPrim
+        , subs_Inh_Ty     = I
+        }
+
+instance HasInh TyEnv Inh_TyEnv where
+  inh a = Inh_TyEnv
+        { fsh_Inh_TyEnv   = tyGen \\ ftv a
+        , ftv_Inh_TyEnv   = tyPrim
+        , subs_Inh_TyEnv  = I
+        }
+        
+instance HasInh Lx Inh_Lx where
+  inh a = Inh_Lx
+        { fsh_Inh_Lx = tyGen
+        , env_Inh_Lx = Map.empty
+        }
+        
+instance HasInh St Inh_St where
+  inh a = Inh_St
+        { fsh_Inh_St = tyGen
+        , env_Inh_St = Map.empty
+        }
+        
+instance HasInh Tm Inh_Tm where
+  inh a = Inh_Tm
+        { fsh_Inh_Tm = tyGen
+        , env_Inh_Tm = Map.empty
+        }
+}

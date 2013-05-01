@@ -1,0 +1,65 @@
+
+-- |@Lx@: a lexicon contains a list of statements.
+data Lx
+   | Lx ss :: Ss
+
+-- |@Ss@: a list of statements.
+type Ss = [St]
+
+-- |@Ss@: a statement is either a type statement
+--  or a term definition.
+data St
+   | Ty an :: An ident :: Ident
+   | Tm an :: An ident :: Var tm :: Tm
+  
+-- |@An@: an annotation is either public (+),
+--  private (-) or "automatic" (@).
+data An
+   | Publ
+   | Priv
+   | Auto
+
+{
+type TyVar = Char
+
+-- |List of primitive semantic type variables.
+tyPrim :: [TyVar]
+tyPrim = "et"
+}
+
+-- |@Ty@: a type is a series of single-character
+--  variables with optional arrows.
+data Ty
+   | Var ident :: TyVar
+   | App ty1,ty2 :: Ty
+   | All ident :: TyVar ty :: Ty
+  
+{
+type Var = String
+}
+
+-- |@MbTy@: an optional type, e.g. for type annotations.
+type MbTy = maybe Ty
+
+-- |@SfTy@: a soft type, i.e. any number of types.
+type SfTy = [Ty]
+
+-- |@Ident@: an optionally typed identifiers.
+
+-- |Set capturing all type representations.
+set TyS : Ty MbTy SfTy
+
+-- |Set capturing all parts of the language.
+set TmS : Lx St Ss Tm
+
+-- |@Tm@: a term is either a variable, an application
+--  or a lambda abstraction.
+data Tm
+   | Var ident :: Ident
+   | App tm1,tm2 :: Tm
+   | Lam ident :: Ident tm :: Tm
+   
+data Ident
+   | Ident name :: Var ty :: MbTy
+
+deriving * : Eq

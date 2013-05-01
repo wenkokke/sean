@@ -1,0 +1,15 @@
++ n     = word
++ n_2   = word
++ np    = word
++ v_1   = word
++ v_2   = word
++ v_3   = word 
++ mod_i = \f.\x. (f x) /\ (word x)
++ mod_r = \f.\x. (f x) /\ (word f x)
++ is    = \x.\y.x == y
++ is_pr = \f.\x.f x
++ some  = \f.\g.?x. (f x) /\ (g x)
++ every = \f.\g.!x. (f x) => (g x)
++ the   = \f.\g.ix. (f x) /\ (g x)
++ a     = some
++ poss  = some
