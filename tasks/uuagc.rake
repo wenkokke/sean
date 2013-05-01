@@ -2,7 +2,7 @@ module UUAGC
   def uuagc(args)
     source = project._(:src,:main,:hs,args.first.ext('.ag'))
     target = source.ext('.hs')
-    deps   = args.drop(1).map {|arg| project._(:src,:main,:hs,arg.ext('.ag'))}
+    deps   = args.map {|arg| project._(:src,:main,:hs,arg.ext('.ag'))}
     # create file task
     file target => deps do
       mkdir_p File.dirname(target)

@@ -9,8 +9,8 @@ type Ss = [St]
 -- |@Ss@: a statement is either a type statement
 --  or a term definition.
 data St
-   | Ty an :: An ident :: Ident
-   | Tm an :: An ident :: Var tm :: Tm
+   | Ty an :: MbAn ident :: Ident
+   | Tm an :: MbAn ident :: Var tm :: Tm
   
 -- |@An@: an annotation is either public (+),
 --  private (-) or "automatic" (@).
@@ -18,6 +18,8 @@ data An
    | Publ
    | Priv
    | Auto
+   
+type MbAn = maybe An
 
 {
 type TyVar = Char
@@ -45,6 +47,9 @@ type MbTy = maybe Ty
 type SfTy = [Ty]
 
 -- |@Ident@: an optionally typed identifiers.
+
+-- |Set capturing all annotation representations.
+set AnS : An MbAn
 
 -- |Set capturing all type representations.
 set TyS : Ty MbTy SfTy

@@ -6,17 +6,17 @@ import UU.Pretty (PP,PP_Doc,(>-<),(>|<),(>#<),text,pp,pp_parens)
 import qualified UU.Pretty as PP (empty)
 }
 
-attr An TyS TmS Ident
+attr AnS TyS TmS Ident
   syn pp use {>-<} {PP.empty} :: PP_Doc
   
 sem St
-  | Ty    loc.pp = @an.pp >#< @ident.pp
-  | Tm    loc.pp = @an.pp >#< text @ident >#< text "=" >#< @tm.pp
+  | Ty    loc.pp = @an.pp >-< @ident.pp
+  | Tm    loc.pp = @an.pp >-< text @ident >#< text "=" >#< @tm.pp
   
 sem An
-  | Publ  loc.pp = text "+"
-  | Priv  loc.pp = text "-"
-  | Auto  loc.pp = text "@"
+  | Publ  loc.pp = text "public"
+  | Priv  loc.pp = text "private"
+  | Auto  loc.pp = text "automatic"
   
 attr Ty Tm
   syn pp_parens :: PP_Doc
@@ -44,10 +44,12 @@ sem Ident
 {
 instance PP Lx where pp lx = pp_Syn_Lx $ wrap_Lx (sem_Lx lx) ((inh lx) {env_Inh_Lx=tyEnv lx})
 instance PP St where pp st = pp_Syn_St $ wrap_St (sem_St st) ((inh st) {env_Inh_St=tyEnv st})
+instance PP An where pp an = pp_Syn_An $ wrap_An (sem_An an) (Inh_An)
 instance PP Tm where pp tm = pp_Syn_Tm $ wrap_Tm (sem_Tm tm) ((inh tm) {env_Inh_Tm=tyEnv tm})
 instance PP Ty where pp ty = pp_Syn_Ty $ wrap_Ty (sem_Ty ty) (inh ty)
 instance Show Lx where show = show . pp
 instance Show St where show = show . pp
+instance Show An where show = show . pp
 instance Show Tm where show = show . pp
 instance Show Ty where show = show . pp
 }
