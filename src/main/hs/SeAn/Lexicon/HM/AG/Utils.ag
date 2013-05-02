@@ -1,0 +1,93 @@
+
+----------------------------------------
+-- syn : Allows Attribute Synthesis   --
+----------------------------------------
+{
+class (HasSem a sem, HasInh a inh, HasWrap sem inh syn)
+    => HasSyn a sem inh syn | a -> sem, a -> inh, a -> syn where
+  syn :: a -> syn
+  syn a = wrap (sem a) (inh a)
+instance HasSyn Ty T_Ty Inh_Ty Syn_Ty
+instance HasSyn TyEnv T_TyEnv Inh_TyEnv Syn_TyEnv
+instance HasSyn An T_An Inh_An Syn_An
+instance HasSyn Tm T_Tm Inh_Tm Syn_Tm
+instance HasSyn Decl T_Decl Inh_Decl Syn_Decl
+instance HasSyn Lexicon T_Lexicon Inh_Lexicon Syn_Lexicon
+}
+
+----------------------------------------
+-- wrap : Allows Attribute Wrapping   --
+----------------------------------------
+{
+class HasWrap sem inh syn | sem -> inh,sem -> syn where
+  wrap :: sem -> inh -> syn
+instance HasWrap T_Ty Inh_Ty Syn_Ty where
+  wrap = wrap_Ty
+instance HasWrap T_TyEnv Inh_TyEnv Syn_TyEnv where
+  wrap = wrap_TyEnv
+instance HasWrap T_An Inh_An Syn_An where
+  wrap = wrap_An
+instance HasWrap T_Tm Inh_Tm Syn_Tm where
+  wrap = wrap_Tm
+instance HasWrap T_Decl Inh_Decl Syn_Decl where
+  wrap = wrap_Decl
+instance HasWrap T_Lexicon Inh_Lexicon Syn_Lexicon where
+  wrap = wrap_Lexicon
+}
+
+----------------------------------------
+-- sem : Allows Semantics Generation  --
+----------------------------------------
+{
+class HasSem a sem | a -> sem where
+  sem :: a -> sem
+instance HasSem Ty T_Ty where
+  sem = sem_Ty
+instance HasSem TyEnv T_TyEnv where
+  sem = sem_TyEnv
+instance HasSem An T_An where
+  sem = sem_An
+instance HasSem Tm T_Tm where
+  sem = sem_Tm
+instance HasSem Decl T_Decl where
+  sem = sem_Decl
+instance HasSem Lexicon T_Lexicon where
+  sem = sem_Lexicon
+}
+
+----------------------------------------
+-- inh : Supports Inherited Arguments --
+----------------------------------------
+{
+class HasInh a inh | a -> inh where
+  inh :: a -> inh
+instance HasInh Ty Inh_Ty where
+  inh a = Inh_Ty
+        { fsh_Inh_Ty      = tyGen \\ ftv a
+        , ftv_Inh_Ty      = tyPrim
+        , subs_Inh_Ty     = I
+        }
+instance HasInh TyEnv Inh_TyEnv where
+  inh a = Inh_TyEnv
+        { fsh_Inh_TyEnv   = tyGen \\ ftv a
+        , ftv_Inh_TyEnv   = tyPrim
+        , subs_Inh_TyEnv  = I
+        }
+instance HasInh An Inh_An where
+  inh a = Inh_An
+instance HasInh Tm Inh_Tm where
+  inh a = Inh_Tm
+        { fsh_Inh_Tm = tyGen
+        , env_Inh_Tm = Map.empty
+        }
+instance HasInh Decl Inh_Decl where
+  inh a = Inh_Decl
+        { fsh_Inh_Decl = tyGen
+        , env_Inh_Decl = Map.empty
+        }
+instance HasInh Lexicon Inh_Lexicon where
+  inh a = Inh_Lexicon
+        { fsh_Inh_Lexicon = tyGen
+        , env_Inh_Lexicon = Map.empty
+        }
+}

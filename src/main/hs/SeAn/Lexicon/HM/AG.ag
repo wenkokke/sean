@@ -1,0 +1,7 @@
+module {SeAn.Lexicon.HM.AG}{}{}
+
+include "AG/HM.ag"
+include "AG/Base.ag"
+include "AG/StdLib.ag"
+include "AG/Printing.ag"
+include "AG/Utils.ag"

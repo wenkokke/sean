@@ -1,7 +1,6 @@
-import SeAn.HM.Base
-import SeAn.HM.StdLib
-import SeAn.HM.Parsing
-import SeAn.HM.Printing
+import SeAn.Lexicon.HM.Base
+import SeAn.Lexicon.HM.Parsing
+import SeAn.Lexicon.HM.Printing
 
 import Data.String.Utils
 import Text.ParserCombinators.UU (amb,(<$>),(<*>))
@@ -11,4 +10,4 @@ main :: IO ()
 main = getContents >>= print . parse "stdin"
 
 -- |Parses a lexicon file without birdtags.
-parse file = runParser file pLx
+parse file = runParser file pLexicon

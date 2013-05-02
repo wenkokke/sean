@@ -1,0 +1,60 @@
+
+-- |@Lx@: a lexicon contains a list of statements.
+data Lexicon
+   | Lexicon decls :: Decls
+
+-- |@Decls@: a list of statements.
+type Decls = [Decl]
+
+-- |@Decl@: a statement is either a type statement or a term definition.
+data Decl
+   | TyDecl an :: MbAn ident :: Ident
+   | TmDecl an :: MbAn ident :: Var tm :: Tm
+  
+-- |@Ann@: an annotation is either public (+) or private (-).
+data An
+   | Publ
+   | Priv
+   
+type MbAn = maybe An
+
+{
+type TyVar = String
+}
+
+-- |@Ty@: a type is a series of single-character
+--  variables with optional arrows.
+data Ty
+   | TyVar ident :: TyVar
+   | TyApp ty1,ty2 :: Ty
+   | TyAll ident :: TyVar ty :: Ty
+  
+{
+type Var = String
+}
+
+-- |@MbTy@: an optional type, e.g. for type annotations.
+type MbTy = maybe Ty
+
+-- |@Ident@: an optionally typed identifiers.
+
+-- |Set capturing all annotation representations.
+set AnS : An MbAn
+
+-- |Set capturing all type representations.
+set TyS : Ty MbTy
+
+-- |Set capturing all parts of the language.
+set TmS : Lexicon Decls Decl Tm
+
+-- |@Tm@: a term is either a variable, an application
+--  or a lambda abstraction.
+data Tm
+   | Var ident :: Ident
+   | App tm1,tm2 :: Tm
+   | Lam ident :: Ident tm :: Tm
+   
+data Ident
+   | Ident name :: Var ty :: MbTy
+
+deriving * : Eq

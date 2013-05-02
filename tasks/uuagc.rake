@@ -6,7 +6,7 @@ module UUAGC
     # create file task
     file target => deps do
       mkdir_p File.dirname(target)
-      puts agc = "uuagc -P . -Hdcfwsr #{source}"
+      puts agc = "uuagc -P . -Hdcfws --newtypes #{source}"
       fail unless system agc
     end
     with target

@@ -2,30 +2,28 @@ define 'sean' do
   project.version = '0.0.1'
   
   compile.uuagc(%w{
-    SeAn/HM/AG
-    SeAn/HM/AG/Base
-    SeAn/HM/AG/StdLib
-    SeAn/HM/AG/Printing
-    SeAn/HM/AG/HM
+    SeAn/Lexicon/HM/AG
+    SeAn/Lexicon/HM/AG/Base
+    SeAn/Lexicon/HM/AG/StdLib
+    SeAn/Lexicon/HM/AG/Printing
+    SeAn/Lexicon/HM/AG/HM
   })
   
   compile.ghc(%w{
     ParseLLX
-    SeAn/HM/AG
-    SeAn/HM/Base
-    SeAn/HM/StdLib
-    SeAn/HM/Parsing
-    SeAn/HM/Printing
+    SeAn/Lexicon/HM/AG
+    SeAn/Lexicon/HM/Base
+    SeAn/Lexicon/HM/Parsing
+    SeAn/Lexicon/HM/Printing
     SeAn/Utils/Parsing
   })
   
   compile.ghc(%w{
     ParseLX
-    SeAn/HM/AG
-    SeAn/HM/Base
-    SeAn/HM/StdLib
-    SeAn/HM/Parsing
-    SeAn/HM/Printing
+    SeAn/Lexicon/HM/AG
+    SeAn/Lexicon/HM/Base
+    SeAn/Lexicon/HM/Parsing
+    SeAn/Lexicon/HM/Printing
     SeAn/Utils/Parsing
   })
   

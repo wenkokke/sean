@@ -1,0 +1,4 @@
+module {SeAn.Lexicon.STL.AG}{}{}
+
+include "AG/Base.ag"
+include "AG/Printing.ag"
