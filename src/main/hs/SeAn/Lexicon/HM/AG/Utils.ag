@@ -77,8 +77,9 @@ instance HasInh An Inh_An where
   inh a = Inh_An
 instance HasInh Tm Inh_Tm where
   inh a = Inh_Tm
-        { fsh_Inh_Tm = tyGen
-        , env_Inh_Tm = Map.empty
+        { ty_Inh_Tm   = Nothing
+        , fsh_Inh_Tm  = tyGen
+        , env_Inh_Tm  = Map.empty
         }
 instance HasInh Decl Inh_Decl where
   inh a = Inh_Decl

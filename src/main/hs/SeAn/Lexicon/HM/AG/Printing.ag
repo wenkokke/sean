@@ -10,8 +10,8 @@ attr AnS TyS TmS Ident
   syn pp use {>-<} {PP.empty} :: PP_Doc
   
 sem Decl
-  | TyDecl loc.pp = @an.pp >-< @ident.pp
-  | TmDecl loc.pp = @an.pp >-< text @ident >#< text "=" >#< @tm.pp
+  | TyDecl loc.pp = PP.empty
+  | TmDecl loc.pp = @an.pp >-< text @name >#< text ":" >#< @hm.pp >#< text "=" >#< @tm.pp
   
 sem An
   | Publ  loc.pp = text "public"

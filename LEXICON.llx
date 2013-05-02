@@ -1,20 +1,20 @@
 # Constants for First-Order Logic
 
 \begin{align*}
-  &AND     &:& \quad ttt    % written as "/\"
-\\&OR      &:& \quad ttt    % written as "\/"
-\\&IMPLIES &:& \quad ttt    % written as "->"
-\\&EQ      &:& \quad eet    % written as "=="
-\\&FORALL  &:& \quad (et)t  % written as "!."
-\\&EXISTS  &:& \quad (et)t  % written as "?."
-\\&IOTA    &:& \quad (et)e  % written as "i."
+  &\text{AND}     &: \quad &ttt    % written as "/\"
+\\&\text{OR}      &: \quad &ttt    % written as "\/"
+\\&\text{IMPLIES} &: \quad &ttt    % written as "->"
+\\&\text{EQ}      &: \quad &eet    % written as "=="
+\\&\text{FORALL}  &: \quad &(et)t  % written as "!."
+\\&\text{EXISTS}  &: \quad &(et)t  % written as "?."
+\\&\text{IOTA}    &: \quad &(et)e  % written as "i."
 \end{align*}
   
 # Compositional Word-Denotations
 
 set $N = \{N_1,N_2\}$
 
-> N_1     : et
+> N_1   : et
 > N_1   = word
 > N_2   : eet
 > N_2   = word
@@ -33,14 +33,14 @@ set $V = \{V_1,V_2,V_3\}$
 
 set $\text{MOD} = \{\text{MOD}_R\}$
 
-> MOD_I : !a.(at)at
+% MOD_I : !a.(at)at
 > MOD_I = \f.\x.f x /\ word x
-> MOD_R : !a.(at)at
+% MOD_R : !a.(at)at
 > MOD_R = \f.\x.f x /\ word f x
 
 set $\text{IS} = \{\text{IS}_{EQ},\text{IS}_{PR}\}$
 
-> IS_EQ : eet
+% IS_EQ : eet
 > IS_EQ = \x.\y.x == y
 > IS_PR : ((et)et)et
 > IS_PR = \f.\x.f x

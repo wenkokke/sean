@@ -10,6 +10,8 @@ module UUAGC
       fail unless system agc
     end
     with target
+    # update uuagc task
+    project.task :uuagc => target
     # extend the clean task
     project.clean { rm target if File.exist?(target) }
   end

@@ -9,7 +9,7 @@ type Decls = [Decl]
 -- |@Decl@: a statement is either a type statement or a term definition.
 data Decl
    | TyDecl an :: MbAn ident :: Ident
-   | TmDecl an :: MbAn ident :: Var tm :: Tm
+   | TmDecl an :: MbAn name :: Var tm :: Tm
   
 -- |@Ann@: an annotation is either public (+) or private (-).
 data An

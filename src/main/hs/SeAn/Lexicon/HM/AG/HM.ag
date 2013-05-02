@@ -29,41 +29,79 @@ sem Ident
   | Ident lhs.name = @name
           lhs.ty   = @ty.this
 
+-------------------------------------------------
+-- unify : Type Unification                    --
+-------------------------------------------------  
+{
+-- |Type unification as per Robinson's algorithm.
+unify :: Ty -> Ty -> TySubst
+unify (TyVar a) (TyVar b)
+                  | a == b         = I
+                  | otherwise      = S a (TyVar b)
+unify (TyVar a) b | a `elem` ftv b = error "infinite type"
+                  | otherwise      = S a b
+unify a (TyVar b) | b `elem` ftv a = error "infinite type"
+                  | otherwise      = S b a
+unify (TyApp a b) (TyApp c d)      = let s1 = unify a c
+                                         s2 = unify (subst s1 b) (subst s1 d)
+                                     in  s2 `O` s1
+}
+          
+----------------------------------------
+-- inh : Inherited Types              --
+----------------------------------------
+
+attr Tm
+  inh ty :: MbTy
+  
+sem Decl
+  | TmDecl tm.ty = Map.lookup @name @lhs.env
+          
 ----------------------------------------
 -- hm : Hinley-Milner Type Inference  --
 ----------------------------------------
-
+  
 attr Tm MbTy
   syn hm :: Ty
+
+-- |Infer the instantiated type for declarations.
+sem Decl
+   | TmDecl inst.hm :: Ty
+            inst.hm = @tm.hm
   
 sem Tm
-  | Var inst.mbty :: MbTy
-        inst.mbty = @ident.ty <|> Map.lookup @ident.name @lhs.env
-        mbty.fsh  = @lhs.fsh
-        mbty.ftv  = tyPrim
-        mbty.subs = I
-        inst.hm   :: Ty
-        inst.hm   = @mbty.hm
-        hm  .subs = I
-        lhs .hm   = @hm.ins
-        lhs .fsh  = @mbty.fsh
+   | Var -- type of var
+         inst.mbty :: MbTy
+         inst.mbty = @ident.ty <|> @lhs.ty
+                     <|> Map.lookup @ident.name @lhs.env
+         mbty.fsh  = @lhs.fsh
+         mbty.ftv  = tyPrim
+         mbty.subs = I
+         inst.hm   :: Ty
+         inst.hm   = @mbty.hm
+         hm  .subs = I
+         lhs .hm   = @hm.ins
+         lhs .fsh  = @mbty.fsh
         
-  | Lam inst.mbty :: MbTy
-        inst.mbty = @ident.ty
-        mbty.fsh  = @lhs.fsh
-        mbty.ftv  = tyPrim
-        mbty.subs = I
-        tm  .env  = Map.insert @ident.name @mbty.hm @lhs.env
-        tm  .fsh  = @mbty.fsh
-        inst.hm   :: Ty
-        inst.hm   = @mbty.hm
-        lhs .hm   = TyApp @hm.this @tm.hm
-        lhs .fsh  = @tm.fsh
+   | Lam -- type of lambda
+         inst.mbty :: MbTy
+         inst.mbty = @ident.ty
+         mbty.fsh  = @lhs.fsh
+         mbty.ftv  = tyPrim
+         mbty.subs = I
+         tm  .env  = Map.insert @ident.name @mbty.hm @lhs.env
+         tm  .fsh  = @mbty.fsh
+         inst.hm   :: Ty
+         inst.hm   = @mbty.hm
+         lhs .hm   = TyApp @hm.this @tm.hm
+         lhs .fsh  = @tm.fsh
 
+-- |Convert optional types either to fresh type variables
+--  or to the type they represent.
 sem MbTy
-  | Just    lhs.hm  = @just.this
-  | Nothing lhs.hm  = TyVar (head @lhs.fsh)
-            lhs.fsh = tail @lhs.fsh
+   | Just    lhs.hm  = @just.this
+   | Nothing lhs.hm  = TyVar (head @lhs.fsh)
+             lhs.fsh = tail @lhs.fsh
 
 ----------------------------------------
 -- env : Type Environments            --
@@ -75,6 +113,11 @@ type TyEnv = map {Var} Ty
 
 attr TmS Ident
   chn env :: TyEnv
+  
+sem Decl
+   | TyDecl lhs.env = case @ident.ty of
+                      Just ty -> Map.insert @ident.name ty @lhs.env
+                      Nothing -> @lhs.env
   
 {
 class    HasTyEnv ty      where tyEnv :: ty -> TyEnv
@@ -107,21 +150,21 @@ attr TmS TyS TyEnv
   chn fsh :: TyGen
   
 sem Ident
-  | *   ty .fsh = tyGen
-        env.fsh = tyGen
+   | * ty .fsh = tyGen
+       env.fsh = tyGen
       
 sem Ty
-  | TyApp ty1.fsh = @lhs.fsh
-          ty2.fsh = @ty1.fsh
-          lhs.fsh = @ty2.fsh
+   | TyApp ty1.fsh = @lhs.fsh
+           ty2.fsh = @ty1.fsh
+           lhs.fsh = @ty2.fsh
         
 sem Tm
-  | App   tm1.fsh = @lhs.fsh
-          tm2.fsh = @tm1.fsh
-          lhs.fsh = @tm2.fsh
+   | App tm1.fsh = @lhs.fsh
+         tm2.fsh = @tm1.fsh
+         lhs.fsh = @tm2.fsh
         
 sem Decls
-  | Cons  hd.fsh = @lhs.fsh
+   | Cons hd.fsh = @lhs.fsh
           tl.fsh = @lhs.fsh
 
 {
@@ -146,11 +189,11 @@ attr TyS TyEnv
   syn subd :: self
   
 sem Ident
-  | * ty .subs = I
-      env.subs = I
+   | * ty .subs = I
+       env.subs = I
 
 sem Ty
-  | TyVar lhs.subd = case @lhs.subs of
+   | TyVar lhs.subd = case @lhs.subs of
                       I       -> @this
                       S x  ty -> if @ident==x then ty else @this
                       O s2 s1 -> subst s2 (subst s1 @this)
@@ -176,9 +219,9 @@ attr TyS TyEnv
   syn ins :: self
 
 sem Ty
-  | TyAll loc.new = head @ty.fsh
-          lhs.fsh = tail @ty.fsh
-          loc.ins = rename @ident @new @ty.ins
+   | TyAll loc.new = head @ty.fsh
+           lhs.fsh = tail @ty.fsh
+           loc.ins = rename @ident @new @ty.ins
 
 {
 class    HasIns ty    where ins :: ty -> ty
@@ -194,7 +237,7 @@ attr TyS TyEnv
   syn gen :: self
   
 sem Ty
-  | * loc.gen = foldr TyAll @this (@ftv \\ @lhs.ftv)
+   | * loc.gen = foldr TyAll @this (@ftv \\ @lhs.ftv)
 
 {
 class    HasGen ty    where gen :: ty -> ty
@@ -214,14 +257,14 @@ attr TyS TyEnv
   chn ftv :: FTV
   
 sem Ident
-  | * inst.env :: TyEnv
-      inst.env = @lhs.env
-      ty  .ftv = @env.ftv
+   | * inst.env :: TyEnv
+       inst.env = @lhs.env
+       ty  .ftv = @env.ftv
 
 sem Ty
-  | TyVar loc.ftv = return @ident
-  | TyApp loc.ftv = @ty1.ftv `union` @ty2.ftv
-  | TyAll loc.ftv = delete @ident @ty.ftv
+   | TyVar loc.ftv = return @ident
+   | TyApp loc.ftv = @ty1.ftv `union` @ty2.ftv
+   | TyAll loc.ftv = delete @ident @ty.ftv
   
 {
 class    HasFTV ty    where ftv :: ty -> FTV
