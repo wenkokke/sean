@@ -3,7 +3,6 @@ imports
 {
 import Prelude hiding (and,or,not)
 import Control.Monad (join)
-import Data.IntMap (IntMap,(!),insert,empty,fold)
 }
 
 {
@@ -19,12 +18,14 @@ env = Map.fromList . map unpack $
   unpack (Var (Ident name (Just ty))) = (name,ty)
 
 -- |List of primitive semantic type variables.
-tyPrim :: [TyVar]
+tyPrim :: FTV
 tyPrim = ["e","t"]
 
 -- |Semantic type combination.
 (~>) :: Ty -> Ty -> Ty
 (~>) = TyApp
+
+
 
 -- |Basic semantic types.
 e,t :: Ty
@@ -41,14 +42,6 @@ ttt   = t ~> tt
 et_t  = et ~> t
 et_e  = et ~> e
 et_et = et ~> et
-
--- |Complex semantic types.
-levels :: IntMap [Ty]
-levels = foldl level empty [0..5]
-
-level :: IntMap [Ty] -> Int -> IntMap [Ty]
-level m 0 = insert 0 [e,t] m
-level m n = insert n [a ~> b | a <- d, b <- d] m where d = fold (++) [] m
 
 -- |Function definition function.
 define :: Var -> Ty -> Tm

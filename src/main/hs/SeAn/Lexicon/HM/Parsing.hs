@@ -37,20 +37,17 @@ pMbAn = pMaybe pAn
 
 -- |Parses types in the extended lexicon syntax.
 pTy :: Parser Ty
-pTy = pAll <|> pApp2
+pTy = pAll <|> pApp2 <|> pApp1
   where
-  pAll  = uncurry (foldr TyAll) <$ pSymbol "!" <*> pTyVars
-  pApp2 = foldr1 TyApp <$> pList1Sep_ng (pSymbol "->") (lexeme pApp1)
+  pAll  = uncurry (foldr TyAll) <$ pSymbol "!" <*> pVars
+  pVars = flip (,) <$> pList1Sep pSpaces pTyVar <* pDot <*> pTy
+  pApp2 = foldr1 TyApp <$> pList2Sep_ng (pSymbol "->") (lexeme pApp1)
   pApp1 = foldr1 TyApp <$> pList1Sep_ng pSucceed pAtom
   pAtom = TyVar <$> pTyVar <|> pParens pTy
 
 -- |Parses a type variable in the extended lexicon syntax.
 pTyVar :: Parser TyVar
 pTyVar = pure <$> pLower
-
--- |Parses type variables in the extended lexicon syntax.
-pTyVars :: Parser (Ty,[TyVar])
-pTyVars = flip (,) <$> pList1Sep pSpaces pTyVar <* pDot <*> pTy
 
 -- |Parses terms in the extended lexicon syntax.
 pTm :: Parser Tm
@@ -64,8 +61,8 @@ pTm = pLambda <|> pForall <|> pExists <|> pIota <|> pTerm
   pDisj      = pOp Std.or      (pSymbol "\\/") pConj
   pConj      = pOp Std.and (pSymbol "/\\") (lexeme pApp)
   pOp f op e = foldl1 (App . App f) <$> pList1Sep op e
-  pApp       = foldl1 App <$> pList1Sep pSpaces pAtom
-  pAtom      = lexeme (pVar <|> pNeg)
+  pApp       = foldl1 App <$> pList1Sep pSpaces1 pAtom
+  pAtom      = pVar <|> pNeg
   pNeg       = App Std.not <$ pSym '~' <*> pVar
   pVar       = Var <$> pIdent <|> pParens pTm
 

@@ -7,6 +7,7 @@ define 'sean' do
     SeAn/Lexicon/HM/AG/StdLib
     SeAn/Lexicon/HM/AG/Printing
     SeAn/Lexicon/HM/AG/HM
+    SeAn/Lexicon/HM/AG/Instances
   })
   
   compile.ghc(%w{
@@ -15,6 +16,7 @@ define 'sean' do
     SeAn/Lexicon/HM/Base
     SeAn/Lexicon/HM/Parsing
     SeAn/Lexicon/HM/Printing
+    SeAn/Utils/AG
     SeAn/Utils/Parsing
   })
   
@@ -24,6 +26,7 @@ define 'sean' do
     SeAn/Lexicon/HM/Base
     SeAn/Lexicon/HM/Parsing
     SeAn/Lexicon/HM/Printing
+    SeAn/Utils/AG
     SeAn/Utils/Parsing
   })
   

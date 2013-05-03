@@ -52,3 +52,11 @@ instance Show Tm      where show = show . pp
 instance Show Decl    where show = show . pp
 instance Show Lexicon where show = show . pp
 }
+
+-- show tysubst
+{
+instance Show TySubst where
+  show (I    ) = "I"
+  show (S a b) = printf "[%s -> %s]" a (show b)
+  show (O a b) = show a ++ show b
+}

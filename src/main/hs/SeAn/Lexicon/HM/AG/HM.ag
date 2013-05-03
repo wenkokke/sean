@@ -7,10 +7,13 @@ optpragmas
 
 imports
 {
-import Control.Applicative (pure,(<|>))
+import Debug.Trace
+import Control.Applicative (pure,(<$>),(<*>),(<|>))
 import Data.List (union,delete,(\\))
-import Data.Maybe (fromMaybe)
 import Data.Map (Map)
+import Data.Maybe (fromMaybe,fromJust)
+import Data.Monoid (Monoid,mappend,mempty)
+import Data.Foldable (fold)
 import qualified Data.Map
 import qualified Data.Map as Map
 import Text.Printf (printf)
@@ -18,90 +21,46 @@ import Text.Printf (printf)
 
 -- |Allows types to access themselves.
 attr TyS
-  syn this :: self
+  syn it :: self
 
 -- |Allows types to acces identifier names.
 attr Ident
   syn name :: Var
   syn ty   :: MbTy
-  
+
 sem Ident
   | Ident lhs.name = @name
-          lhs.ty   = @ty.this
+          lhs.ty   = @ty.it
 
 -------------------------------------------------
 -- unify : Type Unification                    --
--------------------------------------------------  
+-------------------------------------------------
+
 {
 -- |Type unification as per Robinson's algorithm.
-unify :: Ty -> Ty -> TySubst
-unify (TyVar a) (TyVar b)
-                  | a == b         = I
-                  | otherwise      = S a (TyVar b)
-unify (TyVar a) b | a `elem` ftv b = error "infinite type"
-                  | otherwise      = S a b
-unify a (TyVar b) | b `elem` ftv a = error "infinite type"
-                  | otherwise      = S b a
-unify (TyApp a b) (TyApp c d)      = let s1 = unify a c
-                                         s2 = unify (subst s1 b) (subst s1 d)
-                                     in  s2 `O` s1
+unify :: FTV -> Ty -> Ty -> TySubst
+
+unify env (TyVar a) (TyVar b)
+  | a == b                  = I
+  | all (`elem` prim) [a,b] = error (printf "cannot unify %s and %s" a b)
+  | a `elem` prim           = S b (TyVar a)
+  | otherwise               = S a (TyVar b)
+
+unify prim (TyVar a) b
+  | a `elem` prim  = error (printf "cannot unify %s and %s" a (show b))
+  | a `elem` ftv b = error "infinite type"
+  | otherwise      = S a b
+
+unify prim a (TyVar b)
+  | b `elem` prim  = error (printf "cannot unify %s and %s" (show a) b)
+  | b `elem` ftv a = error "infinite type"
+  | otherwise      = S b a
+
+unify prim (TyApp a b) (TyApp c d)
+  = let s1 = unify prim a c
+        s2 = unify prim (subst s1 b) (subst s1 d)
+    in  s2 `mappend` s1
 }
-          
-----------------------------------------
--- inh : Inherited Types              --
-----------------------------------------
-
-attr Tm
-  inh ty :: MbTy
-  
-sem Decl
-  | TmDecl tm.ty = Map.lookup @name @lhs.env
-          
-----------------------------------------
--- hm : Hinley-Milner Type Inference  --
-----------------------------------------
-  
-attr Tm MbTy
-  syn hm :: Ty
-
--- |Infer the instantiated type for declarations.
-sem Decl
-   | TmDecl inst.hm :: Ty
-            inst.hm = @tm.hm
-  
-sem Tm
-   | Var -- type of var
-         inst.mbty :: MbTy
-         inst.mbty = @ident.ty <|> @lhs.ty
-                     <|> Map.lookup @ident.name @lhs.env
-         mbty.fsh  = @lhs.fsh
-         mbty.ftv  = tyPrim
-         mbty.subs = I
-         inst.hm   :: Ty
-         inst.hm   = @mbty.hm
-         hm  .subs = I
-         lhs .hm   = @hm.ins
-         lhs .fsh  = @mbty.fsh
-        
-   | Lam -- type of lambda
-         inst.mbty :: MbTy
-         inst.mbty = @ident.ty
-         mbty.fsh  = @lhs.fsh
-         mbty.ftv  = tyPrim
-         mbty.subs = I
-         tm  .env  = Map.insert @ident.name @mbty.hm @lhs.env
-         tm  .fsh  = @mbty.fsh
-         inst.hm   :: Ty
-         inst.hm   = @mbty.hm
-         lhs .hm   = TyApp @hm.this @tm.hm
-         lhs .fsh  = @tm.fsh
-
--- |Convert optional types either to fresh type variables
---  or to the type they represent.
-sem MbTy
-   | Just    lhs.hm  = @just.this
-   | Nothing lhs.hm  = TyVar (head @lhs.fsh)
-             lhs.fsh = tail @lhs.fsh
 
 ----------------------------------------
 -- env : Type Environments            --
@@ -111,20 +70,127 @@ sem MbTy
 --  can lookup previously inferred types of variables.
 type TyEnv = map {Var} Ty
 
-attr TmS Ident
+attr Lexicon Decls Decl Tm Ident
   chn env :: TyEnv
-  
+
 sem Decl
-   | TyDecl lhs.env = case @ident.ty of
-                      Just ty -> Map.insert @ident.name ty @lhs.env
-                      Nothing -> @lhs.env
-  
+  | TmDecl
+    lhs.env = @lhs.env
+  | TyDecl
+    lhs.env = case @ident.ty of
+              Just ty -> Map.insert @ident.name ty @lhs.env
+              Nothing -> @lhs.env
+
 {
 class    HasTyEnv ty      where tyEnv :: ty -> TyEnv
 instance HasTyEnv Tm      where tyEnv = env_Syn_Tm . syn
 instance HasTyEnv Decl    where tyEnv = env_Syn_Decl . syn
 instance HasTyEnv Lexicon where tyEnv = env_Syn_Lexicon . syn
 }
+
+-- |Type declarations are put into the environment, and passed
+--  back in through the inherited attributes.
+attr Tm
+  inh tyDecl :: MbTy
+
+sem Decl
+  | TmDecl
+    tm.tyDecl = Map.lookup @name @lhs.env
+
+----------------------------------------
+-- hm : Hinley-Milner Type Inference  --
+----------------------------------------
+
+attr Tm
+  syn hm use {<|>} {Nothing} :: MbTy
+  
+attr Tm
+  syn subs use {`mappend`} {mempty} :: TySubst
+  
+attr MbTy
+  syn orFresh :: Ty
+
+-- |Infer the instantiated type for declarations.
+sem Decl
+   | TmDecl inst.hm :: Ty
+            inst.hm = subst (traceShow @tm.subs @tm.subs) (fromJust @tm.hm)
+
+sem Tm
+  | Var -- type of var
+        inst.varTy :: MbTy
+        inst.varTy = @ident.ty <|> @lhs.tyDecl <|> Map.lookup @ident.name @lhs.env
+        varTy.fsh  = @lhs.fsh
+        varTy.ftv  = tyPrim
+        varTy.subs = I
+        
+        inst.hm   :: Ty
+        inst.hm   = @varTy.orFresh
+        hm  .subs = I
+        lhs .hm   = return @hm.ins
+        lhs .fsh  = @varTy.fsh
+
+  | Lam -- type declarations
+        tm .tyDecl = Nothing
+  
+        -- type of lambda
+        inst.argTy :: MbTy
+        inst.argTy = @ident.ty
+        argTy.ftv  = tyPrim
+        argTy.subs = I
+        inst.hm    :: Ty
+        inst.hm    = @argTy.orFresh
+        lhs .hm    = TyApp @argTy.orFresh <$> @tm.hm
+        
+        -- flow lhs => tm => lhs
+        tm   .env  = Map.insert @ident.name @argTy.orFresh @lhs.env
+        lhs  .env  = Map.delete @ident.name @tm.env
+        
+        -- flow lhs => argTy => tm => lhs
+        argTy.fsh  = @lhs.fsh
+        tm   .fsh  = @argTy.fsh
+        lhs  .fsh  = @tm.fsh
+        
+        
+  | App -- type declarations
+        tm1.tyDecl = Nothing
+        tm2.tyDecl = Nothing
+  
+        -- type of return value
+        loc.retTy  = TyVar $ head @lhs.fsh
+        -- type of function
+        loc.funTy  = do ty1 <- @tm1.hm 
+                        ty2 <- @tm2.hm
+                        return $ unify tyPrim ty1 (ty2 ~> @retTy)
+        tm1.subs   = fold @lhs.subs `mappend` @funTy
+        tm2.subs   = fold @lhs.subs `mappend` @funTy
+        lhs.hm     = @funTy >>= \funTy -> return $ subst funTy @retTy
+        
+        -- substitution
+        lhs.subs   = fold @funTy `mappend` (@tm2.subs `mappend` @tm1.subs)
+                        
+        -- flow lhs => tm1 => tm2 => lhs
+        tm1.fsh    = tail @lhs.fsh
+        tm2.fsh    = @tm1.fsh
+        lhs.fsh    = @tm2.fsh
+        
+        -- flow lhs => tm1 => tm2 => lhs
+        tm1.env    = @lhs.env
+        tm2.env    = @tm1.env
+        lhs.env    = case @funTy of
+                        Just sb -> subst sb @tm2.env
+                        Nothing -> error "shouldn't happen"
+    
+-- | create a fresh type @a@, but leave it for the time being
+--   generate the type for @t1@ and for @t2@, then try to unify
+--   the types @t1@ and @t2 -> a@, and return the resulting
+--   substitution applied to @a@.
+
+-- |Convert optional types either to fresh type variables
+--  or to the type they represent.
+sem MbTy
+   | Just    lhs.orFresh = @just.it
+   | Nothing lhs.orFresh = TyVar $ head @lhs.fsh
+             lhs.fsh = tail @lhs.fsh
 
 ----------------------------------------
 -- fsh : Fresh-Name Generators        --
@@ -133,13 +199,13 @@ instance HasTyEnv Lexicon where tyEnv = env_Syn_Lexicon . syn
 {
 -- |Represents a stream of fresh type variables. As it is
 --  a stream, it should not be allowed to run out.
-type TyGen = [TyVar]
+type FSH = [TyVar]
 }
 
 {
 -- |Simple implementation of a typename generator which first
 --  enumerates the alphabet, and then continues with numbered types.
-tyGen :: TyGen
+tyGen :: FSH
 tyGen = az ++ ts
   where
   az = map pure ['a'..'z'] \\ tyPrim
@@ -147,31 +213,26 @@ tyGen = az ++ ts
 }
 
 attr TmS TyS TyEnv
-  chn fsh :: TyGen
-  
+  chn fsh :: FSH
+
 sem Ident
    | * ty .fsh = tyGen
        env.fsh = tyGen
-      
+
 sem Ty
    | TyApp ty1.fsh = @lhs.fsh
            ty2.fsh = @ty1.fsh
            lhs.fsh = @ty2.fsh
-        
-sem Tm
-   | App tm1.fsh = @lhs.fsh
-         tm2.fsh = @tm1.fsh
-         lhs.fsh = @tm2.fsh
-        
+
 sem Decls
    | Cons hd.fsh = @lhs.fsh
           tl.fsh = @lhs.fsh
 
 {
-class    HasFsh ty    where fsh :: ty -> TyGen
+class    HasFsh ty    where fsh :: ty -> FSH
 instance HasFsh Ty    where fsh = fsh_Syn_Ty . syn
 instance HasFsh TyEnv where fsh = fsh_Syn_TyEnv . syn
-}        
+}
 
 --------------------------------------
 -- sub : Type Substitution          --
@@ -181,22 +242,30 @@ instance HasFsh TyEnv where fsh = fsh_Syn_TyEnv . syn
 data TySubst
   = I                 -- ^ the identity substitution;
   | S TyVar Ty        -- ^ substitutes the second argument for the first;
-  | O TySubst TySubst -- ^ substitution composition.
+  | O TySubst TySubst -- ^ substitution composition. 
+  
+-- |Type substitutions form a monoid.
+instance Monoid TySubst where
+  mempty      = I
+  mappend I s = s
+  mappend s I = s
+  mappend a b = a `O` b
 }
+type MbTySubst = maybe TySubst
 
 attr TyS TyEnv
   inh subs :: TySubst
   syn subd :: self
-  
+
 sem Ident
-   | * ty .subs = I
-       env.subs = I
+  | * ty .subs = I
+      env.subs = I
 
 sem Ty
-   | TyVar lhs.subd = case @lhs.subs of
-                      I       -> @this
-                      S x  ty -> if @ident==x then ty else @this
-                      O s2 s1 -> subst s2 (subst s1 @this)
+  | TyVar lhs.subd = case @lhs.subs of
+                     I       -> @it
+                     S x  ty -> if @ident==x then ty else @it
+                     O s2 s1 -> subst s2 (subst s1 @it)
 
 {
 class HasSub ty where
@@ -235,9 +304,9 @@ instance HasIns TyEnv where ins = ins_Syn_TyEnv . syn
 
 attr TyS TyEnv
   syn gen :: self
-  
+
 sem Ty
-   | * loc.gen = foldr TyAll @this (@ftv \\ @lhs.ftv)
+   | * loc.gen = foldr TyAll @it (@ftv \\ @lhs.ftv)
 
 {
 class    HasGen ty    where gen :: ty -> ty
@@ -248,14 +317,14 @@ instance HasGen TyEnv where gen = gen_Syn_TyEnv . syn
 --------------------------------------
 -- ftv : Free Type Variables        --
 --------------------------------------
-{ 
+{
 -- |Represents the free (or unbound) type variables in an expression.
 type FTV = [TyVar]
 }
- 
+
 attr TyS TyEnv
   chn ftv :: FTV
-  
+
 sem Ident
    | * inst.env :: TyEnv
        inst.env = @lhs.env
@@ -265,7 +334,7 @@ sem Ty
    | TyVar loc.ftv = return @ident
    | TyApp loc.ftv = @ty1.ftv `union` @ty2.ftv
    | TyAll loc.ftv = delete @ident @ty.ftv
-  
+
 {
 class    HasFTV ty    where ftv :: ty -> FTV
 instance HasFTV Ty    where ftv ty = ftv_Syn_Ty $ wrap (sem ty) ((inh ty) {fsh_Inh_Ty=[]})
