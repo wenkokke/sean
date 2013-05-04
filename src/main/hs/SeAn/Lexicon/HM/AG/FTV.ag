@@ -1,0 +1,26 @@
+
+-- * Free Type Variables
+
+{
+-- |Represents the free (or unbound) type variables in an expression.
+type FTV = TyVars
+}
+
+attr TyS TyEnv
+  chn ftv :: FTV
+
+sem Ident
+  | Ident inst.env :: TyEnv
+          inst.env = @lhs.env
+          ty  .ftv = @env.ftv
+
+sem Ty
+  | TyVar loc .ftv = return @ident
+  | TyApp loc .ftv = @ty1.ftv `union` @ty2.ftv
+  | TyAll loc .ftv = delete @ident @ty.ftv
+
+{
+class    HasFTV ty    where ftv :: ty -> FTV
+instance HasFTV Ty    where ftv ty = ftv_Syn_Ty $ wrap (sem ty) ((inh ty) {fresh_Inh_Ty=[]})
+instance HasFTV TyEnv where ftv ty = ftv_Syn_TyEnv $ wrap (sem ty) ((inh ty) {fresh_Inh_TyEnv=[]})
+}

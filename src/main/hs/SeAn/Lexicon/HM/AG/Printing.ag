@@ -11,7 +11,7 @@ attr AnS TyS TmS Ident
   
 sem Decl
   | TyDecl loc.pp = PP.empty
-  | TmDecl loc.pp = @an.pp >-< text @name >#< text ":" >#< @hm.pp >#< text "=" >#< @tm.pp
+  | TmDecl loc.pp = @an.pp >-< text @name >#< text "=" >#< @tm.pp
   
 sem An
   | Publ  loc.pp = text "public"
@@ -29,11 +29,11 @@ sem Ty
           loc.pp_parens = pp_parens @pp
         
 sem Tm
-  | Var loc.pp        = text @ident.name >|< text ":" >|< @hm.pp
+  | Var loc.pp        = text @ident.name >|< text ":" >|< @hmTy.pp
         loc.pp_parens = @pp
   | App loc.pp        = @tm1.pp_parens >#< @tm2.pp_parens
         loc.pp_parens = pp_parens @pp
-  | Lam loc.pp        = text "\\" >|< text @ident.name >|< text ":" >|< @hm.pp >|< text "." >|< @tm.pp
+  | Lam loc.pp        = text "\\" >|< text @ident.name >|< text ":" >|< @hmTy.pp >|< text "." >|< @tm.pp
         loc.pp_parens = pp_parens @pp
         
 sem Ident

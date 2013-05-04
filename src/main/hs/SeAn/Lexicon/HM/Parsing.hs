@@ -55,13 +55,13 @@ pTm = pLambda <|> pForall <|> pExists <|> pIota <|> pTerm
   where
 
   -- |Parses simple terms.
-  pTerm      = pEquiv
-  pEquiv     = pOp Std.eq      (pSymbol "==")  pImpl
-  pImpl      = pOp Std.implies (pSymbol "=>")  pDisj
-  pDisj      = pOp Std.or      (pSymbol "\\/") pConj
-  pConj      = pOp Std.and (pSymbol "/\\") (lexeme pApp)
+  pTerm      = pImpl
+  pImpl      = pOp Std.implies (pSymbol "=>")  (pDisj)
+  pDisj      = pOp Std.or      (pSymbol "\\/") (pConj)
+  pConj      = pOp Std.and     (pSymbol "/\\") (pEquiv)
+  pEquiv     = pOp Std.eq      (pSymbol "==")  (lexeme pApp)
   pOp f op e = foldl1 (App . App f) <$> pList1Sep op e
-  pApp       = foldl1 App <$> pList1Sep pSpaces1 pAtom
+  pApp       = foldl1 App <$> pList1Sep_ng pSpaces1 pAtom
   pAtom      = pVar <|> pNeg
   pNeg       = App Std.not <$ pSym '~' <*> pVar
   pVar       = Var <$> pIdent <|> pParens pTm

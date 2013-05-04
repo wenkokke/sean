@@ -1,31 +1,19 @@
 
-imports
-{
-import Prelude hiding (and,or,not)
-import Control.Monad (join)
-}
-
 {
 -- |Default type environment.
 env :: TyEnv
-env = Map.fromList . map unpack $
-  [ forall  , exists
-  , iota    , eq
-  , implies , and
-  , or      , not    ]
+env = makeEnv [forall,exists,iota,eq,implies,and,or,not]
   where
-  unpack :: Tm -> (Var,Ty)
   unpack (Var (Ident name (Just ty))) = (name,ty)
+  makeEnv = Map.fromList . map unpack
 
 -- |List of primitive semantic type variables.
-tyPrim :: FTV
+tyPrim :: TyVars
 tyPrim = ["e","t"]
 
 -- |Semantic type combination.
 (~>) :: Ty -> Ty -> Ty
 (~>) = TyApp
-
-
 
 -- |Basic semantic types.
 e,t :: Ty

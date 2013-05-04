@@ -1,0 +1,47 @@
+
+-- * Type Substitution
+
+{
+-- |Represents type substitutions.
+data TySubst
+  = I                 -- ^ the identity substitution;
+  | S TyVar Ty        -- ^ substitutes the second argument for the first;
+  | O TySubst TySubst -- ^ substitution composition. 
+  
+-- |Type substitutions form a monoid.
+instance Monoid TySubst where
+  mempty      = I
+  mappend I s = s
+  mappend s I = s
+  mappend a b = a `O` b
+}
+type MbTySubst = maybe TySubst
+
+attr Tm Ident TyS TyEnv
+  inh subs :: TySubst
+  syn subd :: self
+
+sem Decl
+  | TyDecl ident.subs = mempty
+  | TmDecl tm   .subs = mempty
+
+sem Ty
+  | TyVar lhs.subd = case @lhs.subs of
+                     I       -> @it
+                     S x  ty -> if @ident==x then ty else @it
+                     O s2 s1 -> subst s2 (subst s1 @it)
+
+{
+class HasSub ty where
+  subst   :: TySubst -> ty -> ty
+  replace :: TyVar -> Ty -> ty -> ty
+  replace a b ty = subst (S a b) ty
+  rename  :: TyVar -> TyVar -> ty -> ty
+  rename  a b ty = replace a (TyVar b) ty
+
+instance HasSub Ty where
+  subst s ty = subd_Syn_Ty $ wrap (sem ty) ((inh ty) {subs_Inh_Ty=s})
+
+instance HasSub TyEnv where
+  subst s ty = fmap (subst s) ty
+}

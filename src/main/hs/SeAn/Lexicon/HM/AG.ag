@@ -1,7 +1,24 @@
-module {SeAn.Lexicon.HM.AG}{}{}
+module {SeAn.Lexicon.HM.AG}{}
+{
+import Prelude hiding (and,or,not,foldr)
+import qualified Prelude (and,or,not,foldr)
 
+import Text.Printf (printf)
+
+import Data.Monoid (Monoid,mappend,mempty)
+import Data.Foldable (fold,foldr)
+import Data.List (union,delete,(\\))
+import Data.Map (Map)
+import qualified Data.Map
+import qualified Data.Map as Map
+}
+
+include "AG/Base"
+include "AG/StdLib"
+--include "AG/Printing"
+include "AG/Instances"
 include "AG/HM.ag"
-include "AG/Base.ag"
-include "AG/StdLib.ag"
-include "AG/Printing.ag"
-include "AG/Instances.ag"
+include "AG/FTV"
+include "AG/TyEnvs"
+include "AG/TySubst"
+include "AG/FreshNames"

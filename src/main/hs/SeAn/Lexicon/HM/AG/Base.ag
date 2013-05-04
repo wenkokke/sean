@@ -1,29 +1,30 @@
 
--- |@Lx@: a lexicon contains a list of statements.
+-- |A lexicon contains a list of statements.
 data Lexicon
    | Lexicon decls :: Decls
 
--- |@Decls@: a list of statements.
+-- |A list of declarations.
 type Decls = [Decl]
 
--- |@Decl@: a statement is either a type statement or a term definition.
+-- |A declaration is either a type statement or a term definition.
 data Decl
    | TyDecl an :: MbAn ident :: Ident
    | TmDecl an :: MbAn name :: Var tm :: Tm
   
--- |@Ann@: an annotation is either public (+) or private (-).
+-- |An annotation is either public (+) or private (-).
 data An
    | Publ
    | Priv
-   
+
+-- |An optional annotation, e.g. for annotations.
 type MbAn = maybe An
 
 {
 type TyVar = String
+type TyVars = [TyVar]
 }
 
--- |@Ty@: a type is a series of single-character
---  variables with optional arrows.
+-- |A type is a series of single-character variables with optional arrows.
 data Ty
    | TyVar ident :: TyVar
    | TyApp ty1,ty2 :: Ty
@@ -31,12 +32,11 @@ data Ty
   
 {
 type Var = String
+type Vars = [Var]
 }
 
--- |@MbTy@: an optional type, e.g. for type annotations.
+-- |An optional type, e.g. for type annotations.
 type MbTy = maybe Ty
-
--- |@Ident@: an optionally typed identifiers.
 
 -- |Set capturing all annotation representations.
 set AnS : An MbAn
@@ -47,14 +47,33 @@ set TyS : Ty MbTy
 -- |Set capturing all parts of the language.
 set TmS : Lexicon Decls Decl Tm
 
--- |@Tm@: a term is either a variable, an application
---  or a lambda abstraction.
+-- |A term is either a variable, an application or a lambda abstraction.
 data Tm
    | Var ident :: Ident
    | App tm1,tm2 :: Tm
    | Lam ident :: Ident tm :: Tm
    
+-- |An identifier is a pair of a name and an optional type.
 data Ident
    | Ident name :: Var ty :: MbTy
+   
+-- |Allows certain data structures to access themselves.
+attr Tm TyS AnS Ident
+  syn it :: self
+   
+-- |Allows types to acces identifier names.
+attr Ident
+  syn name :: Var
+  syn ty   :: MbTy
 
-deriving * : Eq
+-- |Allows identifiers to propagate their values.
+sem Ident
+   | Ident lhs.name = @name
+           lhs.ty   = @ty.it
+
+-- |Allows declarations to access @name and @ty locally.
+sem Decl
+   | TyDecl loc.name = @ident.name
+            loc.ty   = @ident.ty
+
+deriving * : Show, Eq

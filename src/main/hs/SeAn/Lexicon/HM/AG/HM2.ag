@@ -1,0 +1,152 @@
+optpragmas
+{
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+}
+
+imports
+{
+import Debug.Trace
+import Control.Applicative (pure,(<$>),(<*>),(<|>))
+import Data.List (union,delete,(\\))
+import Data.Map (Map)
+import Data.Maybe (fromMaybe,fromJust)
+import Data.Foldable (fold)
+import qualified Data.Map
+import qualified Data.Map as Map
+import Text.Printf (printf)
+}
+
+-------------------------------------------------
+-- unify : Type Unification                    --
+-------------------------------------------------
+
+{
+-- |Type unification as per Robinson's algorithm.
+unify :: FTV -> Ty -> Ty -> TySubst
+
+unify prim (TyVar a) (TyVar b)
+  | a == b                  = I
+  | all (`elem` prim) [a,b] = error (printf "cannot unify %s and %s" a b)
+  | a `elem` prim           = S b (TyVar a)
+  | otherwise               = S a (TyVar b)
+
+unify prim (TyVar a) b
+  | a `elem` prim  = error (printf "cannot unify %s and %s" a (show b))
+  | a `elem` ftv b = error "infinite type"
+  | otherwise      = S a b
+
+unify prim a (TyVar b)
+  | b `elem` prim  = error (printf "cannot unify %s and %s" (show a) b)
+  | b `elem` ftv a = error "infinite type"
+  | otherwise      = S b a
+
+unify prim (TyApp a b) (TyApp c d)
+  = let s1 = unify prim a c
+        s2 = unify prim (subst s1 b) (subst s1 d)
+    in  s2 `mappend` s1
+}
+
+----------------------------------------
+-- stl : Hinley-Milner Type Inference --
+----------------------------------------
+
+attr Lexicon Decls Decl Tm
+  syn stl :: self
+  syn subd :: self
+  
+attr Tm
+  syn hm :: MbTy
+  syn subs use {`mappend`} {mempty} :: TySubst
+  inh subs :: TySubst
+  
+{
+class    HasHm tm      where hm :: tm -> Tm
+instance HasHm Tm      where hm tm = stl_Syn_Tm $ wrap (sem tm) ((inh tm) {env_Inh_Tm=tyEnv tm})
+instance HasHm Decl    where hm dc = stl_Syn_Decl $ wrap (sem dc) ((inh dc) {env_Inh_Decl=tyEnv dc})
+instance HasHm Lexicon where hm lx = stl_Syn_Lexicon $ wrap (sem lx) ((inh lx) {env_Inh_Lexicon=tyEnv lx})
+}
+
+sem Decl
+  | TyDecl lhs.stl = TyDecl @an.it @ident.it
+  | TmDecl lhs.stl = TmDecl @an.it @name @tm.stl
+
+sem Tm
+  | Var -- type of var
+        inst.varTy :: MbTy
+        inst.varTy = @ident.ty <|> @lhs.tyDecl <|> Map.lookup @ident.name @lhs.env
+        varTy.fsh  = @lhs.fsh
+        varTy.ftv  = tyPrim
+        
+        inst.hmTy  :: Ty
+        inst.hmTy  = @varTy.orFresh
+        hmTy.fsh   = @varTy.fsh
+        hmTy.ftv   = tyPrim
+        
+        loc.hm     = return @hmTy.ins
+        lhs.stl    = Var @ident.it @hm
+        lhs.fsh    = @hmTy.fsh
+
+  | Lam -- type declarations
+        tm .tyDecl = Nothing
+  
+        -- type of lambda
+        inst.argTy :: MbTy
+        inst.argTy = @ident.ty
+        argTy.ftv  = tyPrim
+        
+        inst.hmTy  :: Ty
+        inst.hmTy  = @argTy.orFresh
+        
+        loc .hm    = TyApp @hmTy.it <$> @tm.stl
+        lhs .stl   = Lam (Ident @ident.name (Just @hmTy.it)) @tm.stl
+        
+        -- flow lhs => tm => lhs
+        tm   .env  = Map.insert @ident.name @argTy.orFresh @lhs.env
+        lhs  .env  = Map.delete @ident.name @tm.env
+        
+        -- flow lhs => argTy => tm => lhs
+        argTy.fsh  = @lhs.fsh
+        tm   .fsh  = @argTy.fsh
+        lhs  .fsh  = @tm.fsh
+        
+  | App -- type declarations
+        tm1.tyDecl = Nothing
+        tm2.tyDecl = Nothing
+  
+        -- type of return value
+        loc.retTy  = TyVar $ head @lhs.fsh
+        -- type of function
+        loc.funTy  = do ty1 <- @tm1.hm 
+                        ty2 <- @tm2.hm
+                        return $ unify tyPrim ty1 (ty2 ~> @retTy)
+        lhs.hm     = (return . (flip subst) @retTy) <$> @funTy
+        lhs.stl    = App @tm1.stl @tm2.stl
+        
+        -- substitution
+        lhs.subs   = fold @funTy `mappend` (@tm2.subs `mappend` @tm1.subs)
+                        
+        -- flow lhs => tm1 => tm2 => lhs
+        tm1.fsh    = tail @lhs.fsh
+        tm2.fsh    = @tm1.fsh
+        lhs.fsh    = @tm2.fsh
+        
+        -- flow lhs => tm1 => tm2 => lhs
+        tm1.env    = @lhs.env
+        tm2.env    = @tm1.env
+        lhs.env    = case @funTy of
+                        Just sb -> subst sb @tm2.env
+                        Nothing -> error "shouldn't happen"
+
+-- |Convert optional types either to fresh type variables
+--  or to the type they represent.
+attr MbTy
+  syn orFresh :: Ty
+
+sem MbTy
+   | Just    lhs.orFresh = @just.it
+   | Nothing lhs.orFresh = TyVar $ head @lhs.fsh
+             lhs.fsh     = tail @lhs.fsh
+
+

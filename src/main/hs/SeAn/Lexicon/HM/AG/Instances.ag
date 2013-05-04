@@ -1,4 +1,11 @@
 
+optpragmas
+{
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+}
+
 imports
 {
 import SeAn.Utils.AG
@@ -46,16 +53,16 @@ instance HasSem Lexicon T_Lexicon where sem = sem_Lexicon
 {
 instance HasInh Ty Inh_Ty where
   inh a = Inh_Ty
-        { fsh_Inh_Ty      = tyGen \\ ftv a
-        , ftv_Inh_Ty      = tyPrim
-        , subs_Inh_Ty     = I
+        { fresh_Inh_Ty      = tyGen \\ ftv a
+        , ftv_Inh_Ty        = tyPrim
+        , subs_Inh_Ty       = mempty
         }
 
 instance HasInh TyEnv Inh_TyEnv where
   inh a = Inh_TyEnv
-        { fsh_Inh_TyEnv   = tyGen \\ ftv a
-        , ftv_Inh_TyEnv   = tyPrim
-        , subs_Inh_TyEnv  = I
+        { fresh_Inh_TyEnv   = tyGen \\ ftv a
+        , ftv_Inh_TyEnv     = tyPrim
+        , subs_Inh_TyEnv    = mempty
         }
 
 instance HasInh An Inh_An where
@@ -63,20 +70,21 @@ instance HasInh An Inh_An where
 
 instance HasInh Tm Inh_Tm where
   inh a = Inh_Tm
-        { tyDecl_Inh_Tm   = Nothing
-        , fsh_Inh_Tm  = tyGen
-        , env_Inh_Tm  = Map.empty
+        { fresh_Inh_Tm      = tyGen
+        , env_Inh_Tm        = Map.empty
+        , decl_Inh_Tm       = Nothing
+        , subs_Inh_Tm       = mempty
         }
 
 instance HasInh Decl Inh_Decl where
   inh a = Inh_Decl
-        { fsh_Inh_Decl = tyGen
-        , env_Inh_Decl = Map.empty
+        { fresh_Inh_Decl    = tyGen
+        , env_Inh_Decl      = Map.empty
         }
 
 instance HasInh Lexicon Inh_Lexicon where
   inh a = Inh_Lexicon
-        { fsh_Inh_Lexicon = tyGen
-        , env_Inh_Lexicon = Map.empty
+        { fresh_Inh_Lexicon = tyGen
+        , env_Inh_Lexicon   = Map.empty
         }
 }
