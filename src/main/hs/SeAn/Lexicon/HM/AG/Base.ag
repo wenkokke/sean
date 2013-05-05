@@ -75,5 +75,12 @@ sem Ident
 sem Decl
    | TyDecl loc.name = @ident.name
             loc.ty   = @ident.ty
+            
+-- |Allows declarations to access @name and @ty locally.
+sem Tm
+   | Var loc.name = @ident.name
+         loc.ty   = @ident.ty
+   | Lam loc.name = @ident.name
+         loc.ty   = @ident.ty
 
-deriving * : Show, Eq
+deriving * : Eq

@@ -29,11 +29,11 @@ sem Ty
           loc.pp_parens = pp_parens @pp
         
 sem Tm
-  | Var loc.pp        = text @ident.name >|< text ":" >|< @hmTy.pp
+  | Var loc.pp        = text @name >|< text ":" >|< pp @stlTy
         loc.pp_parens = @pp
   | App loc.pp        = @tm1.pp_parens >#< @tm2.pp_parens
         loc.pp_parens = pp_parens @pp
-  | Lam loc.pp        = text "\\" >|< text @ident.name >|< text ":" >|< @hmTy.pp >|< text "." >|< @tm.pp
+  | Lam loc.pp        = text "\\" >|< text @name >|< text ":" >|< pp @stlTy >|< text "." >|< @tm.pp
         loc.pp_parens = pp_parens @pp
         
 sem Ident
@@ -42,6 +42,7 @@ sem Ident
 -- show
 {
 instance PP   Ty      where pp = pp_Syn_Ty . syn
+instance PP   MbTy    where pp = maybe PP.empty pp
 instance PP   An      where pp = pp_Syn_An . syn
 instance PP   Tm      where pp tm = pp_Syn_Tm $ wrap (sem tm) ((inh tm) {env_Inh_Tm=tyEnv tm})
 instance PP   Decl    where pp st = pp_Syn_Decl $ wrap (sem st) ((inh st) {env_Inh_Decl=tyEnv st})

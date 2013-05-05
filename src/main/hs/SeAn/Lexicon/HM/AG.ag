@@ -15,7 +15,7 @@ import qualified Data.Map as Map
 
 include "AG/Base"
 include "AG/StdLib"
---include "AG/Printing"
+include "AG/Printing"
 include "AG/Instances"
 include "AG/HM.ag"
 include "AG/FTV"
