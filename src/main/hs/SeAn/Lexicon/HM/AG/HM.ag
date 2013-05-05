@@ -38,10 +38,11 @@ sem Tm
         inst.fshTy  :: Ty
         inst.fshTy  = @argTy.orFresh
         fshTy.fresh = @argTy.fresh
+        fshTy.subs  = @tm.subs
         fshTy.ftv   = tyPrim
         
-        loc .stlTy  = TyApp @fshTy.it <$> @tm.stlTy
-        lhs .stl    = Lam (Ident @name (Just @fshTy.it)) @tm.stl
+        loc .stlTy  = TyApp @fshTy.subd <$> @tm.stlTy
+        lhs .stl    = Lam (Ident @name (Just @fshTy.subd)) @tm.stl
         
         tm   .env   = Map.insert @name @fshTy.it @lhs.env
         lhs  .env   = Map.delete @name @tm.env
@@ -55,13 +56,17 @@ sem Tm
                         return $ traceShow s s
         lhs.stlTy  = do tySub <- @tySub ; return $ subst tySub @retTy
         
-        inst.stl   :: Tm
-        inst.stl   = App @tm1.stl @tm2.stl
-        --stl .subs  = @subs
-        lhs .stl   = @stl.it
+        lhs.subs   = fold @tySub `mappend` (@tm1.subs `mappend` @tm2.subs)
         
-        -- substitution
-        --loc .subs  = fold @tySub `mappend` (@tm2.subs `mappend` @tm1.subs)
+        inst.stlf  :: Tm
+        inst.stlf  = @tm1.stl
+        stlf.subs  = fold @tySub `mappend` @tm2.subs
+        stlf.fresh = @tm1.fresh
+        inst.stla  :: Tm
+        inst.stla  = @tm2.stl
+        stla.subs  = fold @tySub `mappend` @tm1.subs
+        stla.fresh = @stlf.fresh
+        lhs .stl   = App @stlf.subd @stla.subd
                         
         -- flow lhs => tm1 => tm2 => lhs
         tm1.fresh  = tail @lhs.fresh
