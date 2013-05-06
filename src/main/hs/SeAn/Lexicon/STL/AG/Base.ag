@@ -1,7 +1,7 @@
 
 -- |@Lx@: a lexicon contains a list of statements.
-data Lx
-   | Lx decls :: Decls
+data Lexicon
+   | Lexicon decls :: Decls
 
 -- |@Ss@: a list of statements.
 type Decls = [Decl]
@@ -9,7 +9,7 @@ type Decls = [Decl]
 -- |@Ss@: a statement is either a type statement
 --  or a term definition.
 data Decl
-   | Decl an :: An ident :: Var tm :: Tm
+   | Decl an :: An name :: Var tm :: Tm
   
 -- |@An@: an annotation is either public (+),
 --  private (-) or "automatic" (@).
@@ -41,5 +41,26 @@ data Tm
    
 data Ident
    | Ident name :: Var ty :: Ty
+   
+-- |Allows certain data structures to propagate themselves.
+attr Tm Ty An Ident
+  syn it :: self
+   
+-- |Allows types to acces identifier names.
+attr Ident
+  syn name :: Var
+  syn ty   :: Ty
 
-deriving * : Eq
+-- |Allows identifiers to propagate their values.
+sem Ident
+   | Ident lhs.name = @name
+           lhs.ty   = @ty.it
+            
+-- |Allows declarations to access @name and @ty locally.
+sem Tm
+   | Var loc.name = @ident.name
+         loc.ty   = @ident.ty
+   | Lam loc.name = @ident.name
+         loc.ty   = @ident.ty
+
+deriving * : Show,Eq

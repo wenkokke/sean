@@ -9,24 +9,22 @@ import qualified UU.Pretty as PP (empty)
 attr AnS TyS TmS Ident
   syn pp use {>-<} {PP.empty} :: PP_Doc
   
-sem St
-  | Ty    loc.pp = @an.pp >-< @ident.pp
-  | Tm    loc.pp = @an.pp >-< text @ident >#< text "=" >#< @tm.pp
+sem Decl
+  | Decl loc.pp = @an.pp >-< text @name >#< text "=" >#< @tm.pp
   
 sem An
   | Publ  loc.pp = text "public"
   | Priv  loc.pp = text "private"
-  | Auto  loc.pp = text "automatic"
   
 attr Ty Tm
   syn pp_parens :: PP_Doc
   
 sem Ty
-  | Var loc.pp        = text [@ident]
+  | Var loc.pp        = text @ident
         loc.pp_parens = @pp
   | App loc.pp        = @ty1.pp_parens >|< @ty2.pp
         loc.pp_parens = pp_parens @pp
-  | All loc.pp        = text ['!',@ident,'.'] >|< @ty.pp
+  | All loc.pp        = text "!" >|< text @ident >|< text "." >|< @ty.pp
         loc.pp_parens = pp_parens @pp
         
 sem Tm

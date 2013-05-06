@@ -1,7 +1,9 @@
 module {SeAn.Lexicon.HM.AG}{}
 {
-import Prelude hiding (and,or,not,foldr,log)
-import qualified Prelude (and,or,not,foldr,log)
+import qualified SeAn.Lexicon.STL as STL
+
+import Prelude hiding (and,or,not,foldr)
+import qualified Prelude (and,or,not,foldr)
 
 import Text.Printf (printf)
 import Data.Monoid (Monoid,mappend,mempty)
@@ -12,8 +14,8 @@ import qualified Data.Map
 import qualified Data.Map as Map
 }
 
-include "AG/Base"
-include "AG/StdLib"
-include "AG/Printing"
-include "AG/Instances"
-include "AG/ToSTL"
+include "ToSTL/HM"
+include "ToSTL/FTV"
+include "ToSTL/TyEnvs"
+include "ToSTL/TySubst"
+include "ToSTL/FreshNames"

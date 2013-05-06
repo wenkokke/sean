@@ -1,0 +1,186 @@
+
+imports
+{
+import Data.Maybe (fromJust)
+import Debug.Trace (trace)
+import Control.Applicative ((<$>),(<|>))
+}
+
+{
+log :: (Show a) => String -> a -> a
+log s a = trace (printf s $ show a) a
+
+log10 :: (Show a) => String -> [a] -> [a]
+log10 s a = trace (printf s $ show $ take 10 a) a
+}
+
+-- * Hinley-Milner Type Inference
+
+attr Lexicon Decls Decl Tm AnS TyS Ident
+  syn hmTm :: self
+  
+attr Tm
+  syn hmTy :: MbTy
+  syn subs :: TySubst
+
+sem Decl
+  | TyDecl lhs.hmTm = TyDecl @an.it @ident.it
+  | TmDecl lhs.hmTm = TmDecl @an.it @name @tm.hmTm
+  
+-- @ty <|> @lhs.decl <|> Map.lookup @name @lhs.env
+sem Tm
+  | Var inst .varTy :: Ty
+        inst .varTy = case Map.lookup @name (log "var.env %s" $ @lhs.env) of
+                      Just ty -> ty
+                      Nothing -> error (printf "no value for '%s' in env" @name)
+        varTy.fresh = @lhs.fresh
+        varTy.subs  = mempty
+        varTy.ftv   = tyPrim
+        
+        loc  .subs  = @varTy.inssub
+        lhs  .hmTm  = Var (Ident @name @hmTy)
+        loc  .hmTy  = return @varTy.ins
+        
+        lhs  .env   = log "var^env %s" $ subst @varTy.inssub @lhs.env
+        lhs  .fresh = @varTy.fresh
+        
+  | Lam loc  .lmTy1 = TyVar $ head @lhs.fresh
+        loc  .lmTy2 = subst @subs @lmTy1
+        loc  .subs  = @tm.subs
+        lhs  .hmTy  = TyApp @lmTy2 <$> @tm.hmTy
+        lhs  .hmTm  = Lam (Ident @name $ Just @lmTy2) @tm.hmTm
+        
+        tm   .env   = log "lam_env %s" $ Map.insert @name (gen @lmTy1) @lhs.env
+        lhs  .env   = log "lam^env %s" $ Map.delete @name @tm.env
+        
+        tm   .fresh = tail @lhs.fresh
+        lhs  .fresh = @tm.fresh
+        
+  | App loc  .retTy = TyVar $ head @lhs.fresh
+        loc  .subs0 = fold $ do ty1 <- @tm1.hmTy
+                                ty2 <- @tm2.hmTy
+                                let f = (ty2 ~> @retTy)
+                                let s = unify tyPrim ty1 f
+                                return $ trace
+                                  (printf "unify with %s gives %s" (show f) (show s)) s
+        loc  .subs1 = log "app.subs1 %s" $ @tm1.subs
+        loc  .subs2 = log "app.subs2 %s" $ @subs0 `mappend` @tm2.subs
+        loc  .subs  = log "app^subs  %s" $ @subs2 `mappend` @subs1
+        
+        lhs  .hmTy  = return $ log "app^hmTy %s" $ subst @subs @retTy
+        inst .hmTm1 :: Tm
+        inst .hmTm1 = log "app.hm1 %s" $ @tm1.hmTm
+        hmTm1.subs  = log "app.hm1.subs %s" $ @subs
+        inst .hmTm2 :: Tm
+        inst .hmTm2 = log "app.hm2 %s" $ @tm2.hmTm
+        hmTm2.subs  = log "app.hm2.subs %s" $ @subs
+        lhs  .hmTm  = let
+                         hm1 = log "app.sd1 %s" $ @hmTm1.subd
+                         hm2 = log "app.sd2 %s" $ @hmTm2.subd
+                      in App hm1 hm2
+                        
+        -- flow lhs => tm1 => tm2 => lhs
+        tm1  .fresh = tail @lhs.fresh
+        tm2  .fresh = @tm1.fresh
+        lhs  .fresh = @tm2.fresh
+        
+        tm1  .env   = log "app_env1 %s" $ @lhs.env
+        tm2  .env   = log "app_env2 %s" $ subst @subs1 @tm1.env
+        lhs  .env   = log "app^env  %s" $ subst @subs2 @tm2.env
+
+-- |Convert optional types either to fresh type variables
+--  or to the type they represent.
+attr MbTy
+  syn orFresh :: Ty
+
+sem MbTy
+   | Just    lhs.orFresh = @just.it
+   | Nothing lhs.orFresh = TyVar $ head @lhs.fresh
+             lhs.fresh   = tail @lhs.fresh
+             
+{
+class    HasHm tm      where hm :: tm -> tm
+instance HasHm Tm      where hm tm = hmTm_Syn_Tm $ wrap (sem tm) ((inh tm) {env_Inh_Tm=tyEnv tm})
+instance HasHm Decl    where hm dc = hmTm_Syn_Decl $ wrap (sem dc) ((inh dc) {env_Inh_Decl=tyEnv dc})
+instance HasHm Lexicon where hm lx = hmTm_Syn_Lexicon $ wrap (sem lx) ((inh lx) {env_Inh_Lexicon=tyEnv lx})
+}
+
+-- * Type Unification
+
+{
+-- |Type unification as per Robinson's algorithm.
+unify :: TyVars -> Ty -> Ty -> TySubst
+
+unify prim (TyVar a) (TyVar b)
+  | a == b                  = I
+  | all (`elem` prim) [a,b] = error (printf "cannot unify %s and %s" a b)
+  | a `elem` prim           = S b (TyVar a)
+  | otherwise               = S a (TyVar b)
+
+unify prim (TyVar a) b
+  | a `elem` prim  = error (printf "cannot unify %s and %s" a (show b))
+  | a `elem` ftv b = error "infinite type"
+  | otherwise      = S a b
+
+unify prim a (TyVar b)
+  | b `elem` prim  = error (printf "cannot unify %s and %s" (show a) b)
+  | b `elem` ftv a = error "infinite type"
+  | otherwise      = S b a
+
+unify prim (TyApp a b) (TyApp c d)
+  = let s1 = unify prim a c
+        s2 = unify prim (subst s1 b) (subst s1 d)
+    in  s2 `mappend` s1
+}
+
+-- * Type Declaractions
+
+-- |Type declarations are put into the environment, and passed
+--  back in through the inherited attributes.
+attr Tm
+  inh decl :: MbTy
+
+sem Decl
+  | TmDecl tm .decl = Map.lookup @name @lhs.env
+  
+sem Tm
+  | Lam    tm .decl = do TyApp _ ty <- @lhs.decl ; return ty
+  | App    tm1.decl = Nothing
+           tm2.decl = Nothing
+
+
+-- * Type Instantiation
+
+attr TyS TyEnv
+  syn ins    :: self
+  
+attr TyS
+  syn inssub use {`mappend`} {mempty} :: TySubst
+
+sem Ty
+  | TyAll loc.new    = head @ty.fresh
+          lhs.fresh  = tail @ty.fresh
+          loc.ins    = rename @ident @new @ty.ins
+          loc.inssub = @ty.inssub `mappend` S @ident (TyVar @new)
+  | TyVar loc.inssub = mempty
+  | TyApp loc.inssub = mempty
+
+{
+class    HasIns ty    where ins :: ty -> ty
+instance HasIns Ty    where ins = ins_Syn_Ty . syn
+instance HasIns TyEnv where ins = ins_Syn_TyEnv . syn
+}
+
+-- * Type Generalization
+
+attr TyS TyEnv
+  syn gen :: self
+
+sem Ty
+   | * loc.gen = foldr TyAll @it (@ftv \\ @lhs.ftv)
+
+{
+class    HasGen ty    where gen :: ty -> ty
+instance HasGen Ty    where gen = gen_Syn_Ty . syn
+instance HasGen TyEnv where gen = gen_Syn_TyEnv . syn
+}

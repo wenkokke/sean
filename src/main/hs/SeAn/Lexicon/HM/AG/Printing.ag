@@ -11,7 +11,7 @@ attr AnS TyS TmS Ident
   
 sem Decl
   | TyDecl loc.pp = PP.empty
-  | TmDecl loc.pp = @an.pp >-< text @name >#< text ":" >#< (pp @tm.stlTy) >#< text "=" >#< @tm.pp
+  | TmDecl loc.pp = @an.pp >-< text @name >#< text ":" >#< pp @tm.hmTy >#< text "=" >#< @tm.pp
   
 sem An
   | Publ  loc.pp = text "public"
@@ -29,11 +29,11 @@ sem Ty
           loc.pp_parens = pp_parens @pp
         
 sem Tm
-  | Var loc.pp        = text @name >|< text ":" >|< pp @stlTy
+  | Var loc.pp        = text @name >|< text ":" >|< pp @ty
         loc.pp_parens = @pp
   | App loc.pp        = @tm1.pp_parens >#< @tm2.pp_parens
         loc.pp_parens = pp_parens @pp
-  | Lam loc.pp        = text "\\" >|< text @name >|< text ":" >|< @fshTy.pp >|< text "." >|< @tm.pp
+  | Lam loc.pp        = text "\\" >|< text @name >|< text ":" >|< pp @ty >|< text "." >|< @tm.pp
         loc.pp_parens = pp_parens @pp
         
 sem Ident
@@ -52,12 +52,4 @@ instance Show An      where show = show . pp
 instance Show Tm      where show = show . pp
 instance Show Decl    where show = show . pp
 instance Show Lexicon where show = show . pp
-}
-
--- show tysubst
-{
-instance Show TySubst where
-  show (I    ) = "I"
-  show (S a b) = printf "[%s -> %s]" a (show b)
-  show (O a b) = show a ++ show b
 }

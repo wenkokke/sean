@@ -7,7 +7,7 @@ import Text.ParserCombinators.UU (amb,(<$>),(<*>))
 import Text.ParserCombinators.UU.Utils (runParser)
 
 main :: IO ()
-main = getContents >>= sequence_ . map (print . stl) . parse "stdin"
+main = getContents >>= sequence_ . map (print . hm) . parse "stdin"
 
 -- |Parses a lexicon file with birdtags.
 parse file = runParser file (amb pLexicon) . birdtags

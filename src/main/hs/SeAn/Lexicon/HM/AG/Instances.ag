@@ -15,11 +15,11 @@ import SeAn.Utils.AG
 -- syn : Allows Attribute Synthesis   --
 ----------------------------------------
 {
-instance HasSyn Ty 			T_Ty 			Inh_Ty 			Syn_Ty
-instance HasSyn TyEnv 	T_TyEnv 	Inh_TyEnv 	Syn_TyEnv
-instance HasSyn An 			T_An 			Inh_An 			Syn_An
-instance HasSyn Tm 			T_Tm 			Inh_Tm 			Syn_Tm
-instance HasSyn Decl 		T_Decl 		Inh_Decl 		Syn_Decl
+instance HasSyn Ty      T_Ty      Inh_Ty      Syn_Ty
+instance HasSyn TyEnv   T_TyEnv   Inh_TyEnv   Syn_TyEnv
+instance HasSyn An      T_An      Inh_An      Syn_An
+instance HasSyn Tm      T_Tm      Inh_Tm      Syn_Tm
+instance HasSyn Decl    T_Decl    Inh_Decl    Syn_Decl
 instance HasSyn Lexicon T_Lexicon Inh_Lexicon Syn_Lexicon
 }
 
@@ -27,11 +27,11 @@ instance HasSyn Lexicon T_Lexicon Inh_Lexicon Syn_Lexicon
 -- wrap : Allows Attribute Wrapping   --
 ----------------------------------------
 {
-instance HasWrap T_Ty 		 Inh_Ty 		 Syn_Ty 		 where wrap = wrap_Ty
-instance HasWrap T_TyEnv 	 Inh_TyEnv 	 Syn_TyEnv 	 where wrap = wrap_TyEnv
-instance HasWrap T_An 		 Inh_An 		 Syn_An 		 where wrap = wrap_An
-instance HasWrap T_Tm 		 Inh_Tm 		 Syn_Tm 		 where wrap = wrap_Tm
-instance HasWrap T_Decl 	 Inh_Decl 	 Syn_Decl 	 where wrap = wrap_Decl
+instance HasWrap T_Ty      Inh_Ty      Syn_Ty      where wrap = wrap_Ty
+instance HasWrap T_TyEnv   Inh_TyEnv   Syn_TyEnv   where wrap = wrap_TyEnv
+instance HasWrap T_An      Inh_An      Syn_An      where wrap = wrap_An
+instance HasWrap T_Tm      Inh_Tm      Syn_Tm      where wrap = wrap_Tm
+instance HasWrap T_Decl    Inh_Decl    Syn_Decl    where wrap = wrap_Decl
 instance HasWrap T_Lexicon Inh_Lexicon Syn_Lexicon where wrap = wrap_Lexicon
 }
 
@@ -39,11 +39,11 @@ instance HasWrap T_Lexicon Inh_Lexicon Syn_Lexicon where wrap = wrap_Lexicon
 -- sem : Allows Semantics Generation  --
 ----------------------------------------
 {
-instance HasSem Ty 			T_Ty 			where sem = sem_Ty
-instance HasSem TyEnv 	T_TyEnv 	where sem = sem_TyEnv
-instance HasSem An 			T_An 			where sem = sem_An
-instance HasSem Tm 			T_Tm 			where sem = sem_Tm
-instance HasSem Decl 		T_Decl 		where sem = sem_Decl
+instance HasSem Ty      T_Ty      where sem = sem_Ty
+instance HasSem TyEnv   T_TyEnv   where sem = sem_TyEnv
+instance HasSem An      T_An      where sem = sem_An
+instance HasSem Tm      T_Tm      where sem = sem_Tm
+instance HasSem Decl    T_Decl    where sem = sem_Decl
 instance HasSem Lexicon T_Lexicon where sem = sem_Lexicon
 }
 
@@ -66,10 +66,10 @@ instance HasInh TyEnv Inh_TyEnv where
         }
 
 instance HasInh An Inh_An where
-  inh a = Inh_An
+  inh _ = Inh_An
 
 instance HasInh Tm Inh_Tm where
-  inh a = Inh_Tm
+  inh _ = Inh_Tm
         { fresh_Inh_Tm      = tyGen
         , env_Inh_Tm        = Map.empty
         , decl_Inh_Tm       = Nothing
@@ -77,13 +77,13 @@ instance HasInh Tm Inh_Tm where
         }
 
 instance HasInh Decl Inh_Decl where
-  inh a = Inh_Decl
+  inh _ = Inh_Decl
         { fresh_Inh_Decl    = tyGen
         , env_Inh_Decl      = Map.empty
         }
 
 instance HasInh Lexicon Inh_Lexicon where
-  inh a = Inh_Lexicon
+  inh _ = Inh_Lexicon
         { fresh_Inh_Lexicon = tyGen
         , env_Inh_Lexicon   = Map.empty
         }

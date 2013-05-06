@@ -33,9 +33,9 @@ set $V = \{V_1,V_2,V_3\}$
 
 set $\text{MOD} = \{\text{MOD}_R\}$
 
-% MOD_I : !a.(at)at
+> MOD_I : !a.(at)at
 > MOD_I = \f.\x.f x /\ word x
-% MOD_R : !a.(at)at
+> MOD_R : !a.(at)at
 > MOD_R = \f.\x.f x /\ word f x
 
 set $\text{IS} = \{\text{IS}_{EQ},\text{IS}_{PR}\}$
@@ -52,7 +52,7 @@ set $\text{IS} = \{\text{IS}_{EQ},\text{IS}_{PR}\}$
 > EVERY = \f.\g.!x. f x => g x
 
 > THE   : (et)(et)t
-> THE   = \f.\g.ix. f x /\ g x
+> THE   = \f.\g.g (ix.f x)
 
 > A     : (et)(et)t
 > A     = SOME
