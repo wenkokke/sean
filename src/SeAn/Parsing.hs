@@ -5,6 +5,7 @@ module SeAn.Parsing where
 import Prelude hiding (abs,not)
 
 import SeAn.Base
+import Data.Char (toUpper)
 
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -16,36 +17,47 @@ import Text.ParserCombinators.UU.BasicInstances
 import Text.ParserCombinators.UU.Idioms
 import Text.ParserCombinators.UU.Utils
     
-parseType :: String -> Type
-parseType = runParser "stdin" pType
+parseProg :: String -> Prog
+parseProg = runParser "stdin" pProg
+
+parseDecl :: String -> Decl
+parseDecl = runParser "stdin" pDecl
 
 parseExpr :: String -> Expr
 parseExpr = runParser "stdin" pExpr
+    
+parseType :: String -> Type
+parseType = runParser "stdin" pType
 
-pName :: Parser Name
-pName = lexeme $ (++) <$> pSome pLetter <*> pMany pDigit
+parseShortType :: String -> Type
+parseShortType = runParser "stdin" pShortType
 
-pNames :: Parser [Name]
-pNames = pList1Sep pSpaces pName
+pProg :: Parser Prog
+pProg = pSpaces *> iI Prog pDecls Ii
+
+pDecl :: Parser Decl
+pDecl = iI decl pName pNames "=" pExpr Ii
+
+pDecls :: Parser [Decl]
+pDecls = pList1Sep (pSymbol ";") pDecl
 
 pExpr :: Parser Expr
 pExpr = pLet <|> pAbss <|> pBin
   where
   -- parse simple terms
-  pVar  = Var <$> pName <|> pParens pExpr
-  pNeg  = iI not "~" pVar Ii
-  pAtom = pVar <|> pNeg
+  pCon  = iI Con pName ":" pShortType Ii
+  pVar  = iI Var pName Ii <|> pParens pExpr
+  pNot  = iI not "~" (pCon <|> pVar) Ii
+  pAtom = pCon <|> pVar <|> pNot
   
   -- parse let-bindings
-  pDef  = iI def pName "=" pExpr Ii
-  pDefs = pList1Sep (pSymbol ";") pDef
-  pLet  = iI letn "let" pDefs "in" pExpr Ii
+  pLet  = iI letn "let" pDecls "in" pExpr Ii
   
   -- parse abstractions
-  pAbs  = iI abs "\\" pNames "." pExpr Ii
-  pUniv = iI univ "!" pNames "." pExpr Ii
-  pExis = iI exis "?" pNames "." pExpr Ii
-  pIota = iI iota "i" pNames "." pExpr Ii
+  pAbs  = iI abs  "\\" pNames1 "." pExpr Ii
+  pUniv = iI univ "!" pNames1 "." pExpr Ii
+  pExis = iI exis "?" pNames1 "." pExpr Ii
+  pIota = iI iota "i" pNames1 "." pExpr Ii
   pAbss = pAbs <|> pUniv <|> pExis <|> pIota
   
   -- parse applications
@@ -57,7 +69,21 @@ pExpr = pLet <|> pAbss <|> pBin
 pType :: Parser Type
 pType = pChainl (iI TyArr "->" Ii) pAtom
   where
-  pAtom :: Parser Type
   pAtom = TyCon <$> pSymbol "E"
       <|> TyCon <$> pSymbol "T"
       <|> pParens pType
+      
+pShortType :: Parser Type
+pShortType = foldr1 TyArr <$> pList1 pAtom
+  where
+  pAtom = TyCon <$> (:[]) <$> toUpper <$> pAnySym "et"
+      <|> pParens pShortType
+
+pName :: Parser Name
+pName = lexeme $ (++) <$> pSome (pLetter <|> pSym '_') <*> pMany pDigit
+
+pNames :: Parser [Name]
+pNames = pListSep pSpaces pName
+
+pNames1 :: Parser [Name]
+pNames1 = pList1Sep pSpaces pName
