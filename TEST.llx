@@ -1,3 +1,0 @@
-% ID    = \x.x
-% CONST = \x.\y.x
-> APP   = \f.\x.f x
