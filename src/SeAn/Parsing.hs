@@ -36,51 +36,54 @@ pProg :: Parser Prog
 pProg = pSpaces *> iI Prog pDecls Ii
 
 pDecl :: Parser Decl
-pDecl = iI decl pName pNames "=" pExpr Ii
+pDecl = iI decl pName pNames '=' (lexeme pExpr) Ii  <?> "declaration"
 
 pDecls :: Parser [Decl]
-pDecls = pList1Sep (pSymbol ";") pDecl
+pDecls = pList1 (iI pDecl ';' Ii)
 
 pExpr :: Parser Expr
-pExpr = pLet <|> pAbss <|> pBin
+pExpr = pLet <|> pGAbs <|> pBin
   where
   -- parse simple terms
-  pCon  = iI Con pName ":" pShortType Ii
-  pVar  = iI Var pName Ii <|> pParens pExpr
-  pNot  = iI not "~" (pCon <|> pVar) Ii
-  pAtom = pCon <|> pVar <|> pNot
+  pCon  = iI Con pName ":" pShortType Ii            <?> "constructor"
+  pVar  = iI Var pName Ii                           <?> "variable"
+  pPos  = pCon <|> pVar <|> pParens pExpr
+  pNeg  = iI not '~' pPos Ii                        <?> "negation"
+  pAtom = pPos <|> pNeg                             <?> "atomic expression"
   
   -- parse let-bindings
-  pLet  = iI letn "let" pDecls "in" pExpr Ii
+  pLet  = iI letn "let" pDecls "in" pExpr Ii        <?> "let-binding"
   
   -- parse abstractions
-  pAbs  = iI abs  "\\" pNames1 "." pExpr Ii
-  pUniv = iI univ "!" pNames1 "." pExpr Ii
-  pExis = iI exis "?" pNames1 "." pExpr Ii
-  pIota = iI iota "i" pNames1 "." pExpr Ii
-  pAbss = pAbs <|> pUniv <|> pExis <|> pIota
+  pAbs  = iI abs  "\\" pNames1 "." pExpr Ii         <?> "lambda abstraction"
+  pUniv = iI univ "!"  pNames1 "." pExpr Ii         <?> "universal abstraction"
+  pExis = iI exis "?"  pNames1 "." pExpr Ii         <?> "existential abstraction"
+  pIota = iI iota "i"  pNames1 "." pExpr Ii         <?> "iota abstraction"
+  pGAbs = pAbs <|> pUniv <|> pExis <|> pIota        <?> "abstraction"
   
   -- parse applications
   pApp  = pChainl_ng (App <$ pSpaces) pAtom
-  pBin  = foldr pChainl pApp $ map samePrio bins
+  pBin  = foldr pChainl_ng pApp $ map samePrio bins
     where
     samePrio ops = foldr (<|>) empty [ p <$ pSymbol op | (op, p) <- ops ]
   
 pType :: Parser Type
-pType = pChainl (iI TyArr "->" Ii) pAtom
+pType = pChainl (iI TyArr "->" Ii) pAtom            <?> "type"
   where
-  pAtom = TyCon <$> pSymbol "E"
-      <|> TyCon <$> pSymbol "T"
+  pAtom = TyCon <$> pSymbol "e"
+      <|> TyCon <$> pSymbol "t"
       <|> pParens pType
       
 pShortType :: Parser Type
-pShortType = foldr1 TyArr <$> pList1 pAtom
+pShortType = foldr1 TyArr <$> pList1 pAtom          <?> "shorttype"
   where
-  pAtom = TyCon <$> (:[]) <$> toUpper <$> pAnySym "et"
+  pAtom = TyCon <$> (:[]) <$> pAnySym "et"
       <|> pParens pShortType
 
 pName :: Parser Name
-pName = lexeme $ (++) <$> pSome (pLetter <|> pSym '_') <*> pMany pDigit
+pName = lexeme $ (:) <$> pLetter <*> pMany pSymbol  <?> "identifier"
+  where
+  pSymbol = pLetter <|> pDigit <|> pSym '_'
 
 pNames :: Parser [Name]
 pNames = pListSep pSpaces pName

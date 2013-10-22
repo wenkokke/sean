@@ -1,0 +1,15 @@
+
+noun_phrase                 = \A.A word:e ;
+noun                        = word:et ;
+noun_transitive             = word:eet ;
+noun_transitive_q1          = \P.\y.P (\x.word:eet x y) ;
+
+generalized_conjunction     = \A.\B.\x.A x /\ B x ;
+
+definite_article            = \A.\B.B (ix.A x) ;
+existential_quantifier      = \A.\B.?x.A x /\ B x ;
+universal_quantifier        = \A.\B.!x.A x => B x ;
+
+verb_1                      = word:et ;
+verb_2                      = \P.\z.P (\x.word:eet z x) ;
+verb_3                      = \P.\Q.\z.P (\x.Q (\y.word:eeet z x y)) ;

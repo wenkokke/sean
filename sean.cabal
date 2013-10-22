@@ -12,6 +12,6 @@ cabal-version:       >=1.8
 
 library
   exposed-modules:     SeAn
-  build-depends:       base == 4.5.*, uu-parsinglib == 2.8.*, uulib == 0.9.*,
+  build-depends:       base >= 4.5, uu-parsinglib == 2.8.*, uulib == 0.9.*,
                        containers == 0.4.*, monad-supply == 0.3.*, mtl == 2.1.*
   hs-source-dirs:      src

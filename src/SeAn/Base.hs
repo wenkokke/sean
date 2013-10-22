@@ -5,12 +5,12 @@ import Text.Printf (printf)
 import Data.Char (toLower)
 import Data.Map (Map)
 import qualified Data.Map as M (insert,lookup,empty)
-import qualified Data.Maybe as M (fromJust)
+import qualified Data.Maybe as M (fromMaybe)
 
 -- * Basic abstract syntax tree
 
-data Prog
-  = Prog [Decl]
+data Prog = Prog
+  { decls :: [Decl] }
   deriving (Eq,Show)
           
 data Decl
@@ -66,8 +66,8 @@ instance Show Expr where
   show (App (Con "FORALL" _) (Abs x e1)) = printf "!%s.%s" x (show e1)
   show (App (Con "EXISTS" _) (Abs x e1)) = printf "?%s.%s" x (show e1)
   show (App (Con "IOTA"   _) (Abs x e1)) = printf "i%s.%s" x (show e1)
-  show (Abs x  e1) = printf "\\%s.%s" x (show e1)
-  show (App e1 e2) = printf "%s %s" (wrap_fun e1) (wrap_fun e2)
+  show (Abs x  e1)   = printf "\\%s.%s" x (show e1)
+  show (App e1 e2)   = printf "%s %s" (wrap_fun e1) (wrap_fun e2)
   show (Let x e1 e2) = printf "let %s = %s in %s" x (show e1) (show e2)
 
 wrap_fun :: Expr -> String
@@ -126,24 +126,27 @@ nib op       = flip (bin op)
 -- |Map of binary operators and their semantics.
 bins =
   [ [("==" , bin "EQUAL")]
-  , [("\\/", bin "OR"   ),("/\\", bin "AND" )]
-  , [("->" , bin "IMPL" ),("<-" , nib "IMPL")]
-  , [("<->", bin "EQUIV")]
+  , [("\\/", bin "OR"   ), ("/\\", bin "AND" )]
+  , [("=>" , bin "IMPLIES" ), ("<=" , nib "IMPLIES")]
+  , [("<=>", bin "IFF")]
   ]
 
 -- |Maps constants to their type by their @Name@.
 typeOf :: Name -> Type
-typeOf n = M.fromJust . M.lookup n
+typeOf n = M.fromMaybe (error $ "Undefined constant " ++ n)
+         . M.lookup n
          $ M.insert "TRUE"    (t)
          $ M.insert "FALSE"   (t)
          $ M.insert "NOT"     (t ~> t)
          $ M.insert "AND"     (t ~> t ~> t)
          $ M.insert "OR"      (t ~> t ~> t)
          $ M.insert "IMPLIES" (t ~> t ~> t)
+         $ M.insert "IFF"     (t ~> t ~> t)
          $ M.insert "EQ"      (e ~> e ~> t)
          $ M.insert "FORALL"  ((e ~> t) ~> t)
          $ M.insert "EXISTS"  ((e ~> t) ~> t)
          $ M.insert "IOTA"    ((e ~> t) ~> e)
          $ M.empty
          where
-         ((~>),e,t) = (TyArr, TyCon "T", TyCon "E")
+         infixr 4 ~>
+         ((~>),e,t) = (TyArr, TyCon "e", TyCon "t")
