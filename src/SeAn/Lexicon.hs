@@ -7,3 +7,4 @@ module SeAn.Lexicon
 import SeAn.Lexicon.Base
 import SeAn.Lexicon.Parsing
 import SeAn.Lexicon.W
+import SeAn.Lexicon.Ambiguous

@@ -17,6 +17,14 @@ data Decl
    = Decl Name Expr
    deriving (Eq,Show)
   
+data Expr
+   = Con Name Type
+   | Var Name
+   | Abs Name Expr
+   | App Expr Expr
+   | Let Name Expr Expr
+   deriving (Eq)
+
 data Type
    = TyCon Name
    | TyVar Name
@@ -25,14 +33,6 @@ data Type
   
 newtype ShortType
    = ShortType Type
-
-data Expr
-   = Con Name Type
-   | Var Name
-   | Abs Name Expr
-   | App Expr Expr
-   | Let Name Expr Expr
-   deriving (Eq)
 
 type Name = String
 
