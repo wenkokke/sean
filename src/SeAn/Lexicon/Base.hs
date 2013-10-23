@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
-module SeAn.Base where
+module SeAn.Lexicon.Base where
 
 import Text.Printf (printf)
 import Data.Char (toLower)
@@ -9,30 +9,30 @@ import qualified Data.Maybe as M (fromMaybe)
 
 -- * Basic abstract syntax tree
 
-data Prog = Prog
-  { decls :: [Decl] }
-  deriving (Eq,Show)
-          
+data Prog
+   = Prog [Decl]
+   deriving (Eq,Show)
+         
 data Decl
-  = Decl Name Expr
-  deriving (Eq,Show)
+   = Decl Name Expr
+   deriving (Eq,Show)
   
 data Type
-  = TyCon Name
-  | TyVar Name
-  | TyArr Type Type
-  deriving (Eq)
+   = TyCon Name
+   | TyVar Name
+   | TyArr Type Type
+   deriving (Eq)
   
 newtype ShortType
-  = ShortType Type
+   = ShortType Type
 
 data Expr
-  = Con Name Type
-  | Var Name
-  | Abs Name Expr
-  | App Expr Expr
-  | Let Name Expr Expr
-  deriving (Eq)
+   = Con Name Type
+   | Var Name
+   | Abs Name Expr
+   | App Expr Expr
+   | Let Name Expr Expr
+   deriving (Eq)
 
 type Name = String
 
@@ -57,28 +57,28 @@ instance Show Type where
 instance Show Expr where
   show (Var n) = n
   show (Con n t) = printf "%s:%s" n (show (ShortType t))
-  show (App (Con "NOT" _) e1) = printf "~%s" (wrap_fun e1)
-  show (App (App (Con "EQUAL" _) e1) e2) = printf "%s == %s"  (wrap_bin e1) (wrap_bin e2)
-  show (App (App (Con "OR"    _) e1) e2) = printf "%s \\/ %s" (wrap_bin e1) (wrap_bin e2)
-  show (App (App (Con "AND"   _) e1) e2) = printf "%s /\\ %s" (wrap_bin e1) (wrap_bin e2)
-  show (App (App (Con "IMPL"  _) e1) e2) = printf "%s -> %s"  (wrap_bin e1) (wrap_bin e2)
-  show (App (App (Con "EQUIV" _) e1) e2) = printf "%s <-> %s" (wrap_bin e1) (wrap_bin e2)
+  show (App (Con "NOT" _) e1) = printf "~%s" (wrapApp e1)
+  show (App (App (Con "EQUAL" _) e1) e2) = printf "%s == %s"  (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "OR"    _) e1) e2) = printf "%s \\/ %s" (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "AND"   _) e1) e2) = printf "%s /\\ %s" (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "IMPL"  _) e1) e2) = printf "%s -> %s"  (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "EQUIV" _) e1) e2) = printf "%s <-> %s" (wrapBin e1) (wrapBin e2)
   show (App (Con "FORALL" _) (Abs x e1)) = printf "!%s.%s" x (show e1)
   show (App (Con "EXISTS" _) (Abs x e1)) = printf "?%s.%s" x (show e1)
   show (App (Con "IOTA"   _) (Abs x e1)) = printf "i%s.%s" x (show e1)
   show (Abs x  e1)   = printf "\\%s.%s" x (show e1)
-  show (App e1 e2)   = printf "%s %s" (wrap_fun e1) (wrap_fun e2)
+  show (App e1 e2)   = printf "%s %s" (wrapApp e1) (wrapApp e2)
   show (Let x e1 e2) = printf "let %s = %s in %s" x (show e1) (show e2)
 
-wrap_fun :: Expr -> String
-wrap_fun e1@(App _ _) = printf "(%s)" (show e1)
-wrap_fun e1           = wrap_bin e1
+wrapApp :: Expr -> String
+wrapApp e1@(App _ _) = printf "(%s)" (show e1)
+wrapApp e1           = wrapBin e1
   
-wrap_bin :: Expr -> String
-wrap_bin e1@(Var _  ) = show e1
-wrap_bin e1@(Con _ _) = show e1
-wrap_bin e1@(App _ _) = show e1
-wrap_bin e1           = printf "(%s)" (show e1)
+wrapBin :: Expr -> String
+wrapBin e1@(Var _  ) = show e1
+wrapBin e1@(Con _ _) = show e1
+wrapBin e1@(App _ _) = show e1
+wrapBin e1           = printf "(%s)" (show e1)
 
 -- * Utility methods for construction of complex terms
 

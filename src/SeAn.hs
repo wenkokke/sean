@@ -1,9 +1,6 @@
 module SeAn
-  ( module SeAn.Base
-  , module SeAn.Parsing
-  , module SeAn.W
+  ( module SeAn.Lexicon
   ) where
 
-import SeAn.Base
-import SeAn.Parsing
-import SeAn.W
+import SeAn.Lexicon
+import SeAn.Annotation

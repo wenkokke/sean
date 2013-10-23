@@ -1,7 +1,7 @@
-module SeAn.W where
+module SeAn.Lexicon.W where
 
-import SeAn.Base
-import SeAn.Parsing (parseType)
+import SeAn.Lexicon.Base
+import SeAn.Lexicon.Parsing (parseType)
 import Text.Printf (printf)
 
 import Data.Monoid
@@ -19,9 +19,31 @@ import Control.Monad.Trans (lift)
 import Control.Applicative ((<$>))
 
 type NeedsFreshNames a = Supply Name a
-type WithTypeErrors a  = Either TypeError a
+type WithTypeErrors  a = Either TypeError a
 type WithErrors a      = Either ProgError a
 type W a               = ErrorT ProgError (Supply Name) a
+
+{-|
+  Inference algorithm.
+  
+    1. assign each definition its own unique two-part name (name#id)
+    2. unfold each definition into multiple definitions based on 
+       usage of ambiguous functions, i.e.
+          
+          f = { \x.x ; \x.\y.x }
+          g = \x.f x
+          
+       will become
+       
+          f#0 = \x.x
+          f#1 = \x.\y.x
+          g#0 = \x.f#0 x
+          g#1 = \x.f#1 x
+          
+    3. repeat the above steps until a fixpoint is reached.
+    4. apply algorithm w.
+    
+  |-}
 
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.

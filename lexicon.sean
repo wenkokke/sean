@@ -1,15 +1,18 @@
 
-noun_phrase                 = \A.A word:e ;
-noun                        = word:et ;
-noun_transitive             = word:eet ;
-noun_transitive_q1          = \P.\y.P (\x.word:eet x y) ;
+noun_phrase = \A.A word:e ;
 
-generalized_conjunction     = \A.\B.\x.A x /\ B x ;
+noun_1 = word:et ;
+noun_2 = word:eet ;
+noun_2 = \P.\y.P (\x.word:eet x y) ;
 
-definite_article            = \A.\B.B (ix.A x) ;
-existential_quantifier      = \A.\B.?x.A x /\ B x ;
-universal_quantifier        = \A.\B.!x.A x => B x ;
+and = \A.\B.\x.A x /\ B x ;
 
-verb_1                      = word:et ;
-verb_2                      = \P.\z.P (\x.word:eet z x) ;
-verb_3                      = \P.\Q.\z.P (\x.Q (\y.word:eeet z x y)) ;
+the   = \A.\B.B (ix.A x) ;
+some  = \A.\B.?x.A x /\ B x ;
+every = \A.\B.!x.A x => B x ;
+
+verb_phase = word:et ;
+
+verb_1 = word:et ;
+verb_2 = \P.\z.P (\x.word:eet z x) ;
+verb_3 = \P.\Q.\z.P (\x.Q (\y.word:eeet z x y)) ;
