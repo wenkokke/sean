@@ -12,17 +12,21 @@ import qualified Data.Maybe as M (fromMaybe)
 data Prog
    = Prog [Decl]
    deriving (Eq,Show)
-         
+
 data Decl
    = Decl Name Expr
    deriving (Eq,Show)
-  
+
 data Expr
+  -- expressions
    = Con Name Type
    | Var Name
    | Abs Name Expr
    | App Expr Expr
    | Let Name Expr Expr
+
+  -- instantiation
+   | Name :@: Name
    deriving (Eq)
 
 data Type
@@ -30,7 +34,7 @@ data Type
    | TyVar Name
    | TyArr Type Type
    deriving (Eq)
-  
+
 newtype ShortType
    = ShortType Type
 
@@ -53,7 +57,7 @@ instance Show Type where
     where
     wrap ty@(TyArr _ _) = printf "(%s)" (show ty)
     wrap ty             = show ty
-    
+
 instance Show Expr where
   show (Var n) = n
   show (Con n t) = printf "%s:%s" n (show (ShortType t))
@@ -69,11 +73,12 @@ instance Show Expr where
   show (Abs x  e1)   = printf "\\%s.%s" x (show e1)
   show (App e1 e2)   = printf "%s %s" (wrapApp e1) (wrapApp e2)
   show (Let x e1 e2) = printf "let %s = %s in %s" x (show e1) (show e2)
+  show (n :@: w)     = printf "%s @ %s" n w
 
 wrapApp :: Expr -> String
 wrapApp e1@(App _ _) = printf "(%s)" (show e1)
 wrapApp e1           = wrapBin e1
-  
+
 wrapBin :: Expr -> String
 wrapBin e1@(Var _  ) = show e1
 wrapBin e1@(Con _ _) = show e1
@@ -106,10 +111,10 @@ decl n xs e = Decl n (foldr Abs e xs)
 -- |Constructs let bindings with multiple definitions.
 letn decls e = foldr (\(Decl n e) -> Let n e) e decls
 
-{-| 
+{-|
   The binding priority convention which is almost universally used
   for the connectives of propositional calculus is:
-  
+
   (1): ~ binds more tightly than \/ and /\
   (2): \/ and /\ bind more tightly than -> and <-
   (3): -> and <- bind more tightly than <->
@@ -122,7 +127,7 @@ not e = App (con "NOT") e
 -- |Constructs a binary operator.
 bin op e1 e2 = App (App (con op) e1) e2
 nib op       = flip (bin op)
-  
+
 -- |Map of binary operators and their semantics.
 bins =
   [ [("==" , bin "EQUAL")]

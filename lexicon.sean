@@ -1,9 +1,9 @@
 
-noun_phrase = \A.A word:e ;
+noun_phrase = \A.A _:e ;
 
-noun_1 = word:et ;
-noun_2 = word:eet ;
-noun_2 = \P.\y.P (\x.word:eet x y) ;
+noun_1 = _:et ;
+noun_2 = _:eet ;
+noun_2 = \P.\y.P (\x._:eet x y) ;
 
 and = \A.\B.\x.A x /\ B x ;
 
@@ -11,8 +11,10 @@ the   = \A.\B.B (ix.A x) ;
 some  = \A.\B.?x.A x /\ B x ;
 every = \A.\B.!x.A x => B x ;
 
-verb_phase = word:et ;
+verb_phrase = _:et ;
 
-verb_1 = word:et ;
-verb_2 = \P.\z.P (\x.word:eet z x) ;
-verb_3 = \P.\Q.\z.P (\x.Q (\y.word:eeet z x y)) ;
+verb_1 = _:et ;
+verb_2 = \P.\z.P (\x._:eet z x) ;
+verb_3 = \P.\Q.\z.P (\x.Q (\y._:eeet z x y)) ;
+
+text = the (noun_2 @ dog);

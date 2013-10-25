@@ -1,4 +1,4 @@
-module SeAn.Lexicon.W where
+module SeAn.Lexicon.Typing where
 
 import SeAn.Lexicon.Base
 import SeAn.Lexicon.Parsing (parseType)
@@ -23,27 +23,10 @@ type WithTypeErrors  a = Either TypeError a
 type WithErrors a      = Either ProgError a
 type W a               = ErrorT ProgError (Supply Name) a
 
-{-|
-  Inference algorithm.
-  
-    1. assign each definition its own unique two-part name (name#id)
-    2. unfold each definition into multiple definitions based on 
-       usage of ambiguous functions, i.e.
-          
-          f = { \x.x ; \x.\y.x }
-          g = \x.f x
-          
-       will become
-       
-          f#0 = \x.x
-          f#1 = \x.\y.x
-          g#0 = \x.f#0 x
-          g#1 = \x.f#1 x
-          
-    3. repeat the above steps until a fixpoint is reached.
-    4. apply algorithm w.
-    
-  |-}
+-- TODO
+--   update `inferTypes` to keep a list of all indexed names, and to make
+--   sure that any errors are only propagated if *all* definitions of that
+--   function fail (in case of `+` indices) or never (in case of `*` indices)
 
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.
@@ -62,9 +45,8 @@ inferType exp env = case exp of
 
   Con n t     -> return (t , Nil)
 
-  Var n       -> case findByName n env of
-                    (t:_) -> return (t , Nil)
-                    [   ] -> throwError (UnboundVariable n)
+  Var n       -> handleVar env n
+  n :@: w     -> handleVar env n
 
   Abs x e     -> do a <- freshW;
                     (t1 , s1) <- inferType e $ env << (x , a);
@@ -79,6 +61,11 @@ inferType exp env = case exp of
   Let x e1 e2 -> do (t1 , s1) <- inferType e1 $ env
                     (t2 , s2) <- inferType e2 $ applyEnv s1 env << (x , t1)
                     return (t2 , fromList [s1,s2])
+
+handleVar :: TyEnv -> Name -> W (Type, TySubst)
+handleVar env n = case findByName n env of
+  (t:_) -> return (t, Nil)
+  [   ] -> throwError (UnboundVariable n)
 
 -- |Lifting of `unify` to the inference monad.
 unifyW :: Expr -> Type -> Type -> W TySubst

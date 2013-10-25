@@ -16,7 +16,7 @@ import Text.ParserCombinators.UU
 import Text.ParserCombinators.UU.BasicInstances
 import Text.ParserCombinators.UU.Idioms
 import Text.ParserCombinators.UU.Utils
-    
+
 parseProg :: String -> Prog
 parseProg = runParser "stdin" pProg
 
@@ -25,7 +25,7 @@ parseDecl = runParser "stdin" pDecl
 
 parseExpr :: String -> Expr
 parseExpr = runParser "stdin" pExpr
-    
+
 parseType :: String -> Type
 parseType = runParser "stdin" pType
 
@@ -45,35 +45,36 @@ pExpr :: Parser Expr
 pExpr = pLet <|> pGAbs <|> pBin
   where
   -- parse simple terms
-  pCon  = iI Con pName ":" pShortType Ii                <?> "constructor"
+  pHole = iI (Con "_") '_' ':' pShortType Ii            <?> "hole"
   pVar  = iI Var pName Ii                               <?> "variable"
-  pPos  = pCon <|> pVar <|> pParens pExpr
+  pInst = iI (:@:) pName '@' pName Ii                   <?> "hole instantiation"
+  pPos  = pHole <|> pInst <|> pVar <|> pParens pExpr
   pNeg  = iI not '~' pPos Ii                            <?> "negation"
   pAtom = pPos <|> pNeg                                 <?> "atomic expression"
-  
+
   -- parse let-bindings
   pLet  = iI letn "let" pDecls "in" pExpr Ii            <?> "let-binding"
-  
+
   -- parse abstractions
   pAbs  = iI abs  "\\" pNames1 "." pExpr Ii             <?> "lambda abstraction"
   pUniv = iI univ "!"  pNames1 "." pExpr Ii             <?> "universal abstraction"
   pExis = iI exis "?"  pNames1 "." pExpr Ii             <?> "existential abstraction"
   pIota = iI iota "i"  pNames1 "." pExpr Ii             <?> "iota abstraction"
   pGAbs = pAbs <|> pUniv <|> pExis <|> pIota            <?> "abstraction"
-  
+
   -- parse applications
   pApp  = pChainl_ng (App <$ pSpaces) pAtom
   pBin  = foldr pChainl_ng pApp $ map samePrio bins
     where
     samePrio ops = foldr (<|>) empty [ p <$ pSymbol op | (op, p) <- ops ]
-  
+
 pType :: Parser Type
 pType = pChainl (iI TyArr "->" Ii) pAtom                <?> "type"
   where
   pAtom = TyCon <$> pSymbol "e"
       <|> TyCon <$> pSymbol "t"
       <|> pParens pType
-      
+
 pShortType :: Parser Type
 pShortType = foldr1 TyArr <$> pList1 pAtom              <?> "shorttype"
   where
