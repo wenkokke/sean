@@ -1,8 +1,10 @@
+{-# LANGUAGE TupleSections #-}
 module SeAn.Lexicon.Typing where
 
 import SeAn.Lexicon.Base
 import SeAn.Lexicon.Parsing (parseType)
 import Text.Printf (printf)
+import Debug.Trace (traceShow)
 
 import Data.Monoid
 import Data.Traversable (forM)
@@ -12,6 +14,7 @@ import qualified Data.Map as M
 import qualified Data.Traversable as M
 import qualified Data.List as L
 import qualified Data.Traversable as L
+import Data.Either (lefts,rights)
 
 import Control.Monad.Error (Error (..),ErrorT,runErrorT,throwError,catchError)
 import Control.Monad.Supply (Supply,supply,evalSupply)
@@ -23,21 +26,41 @@ type WithTypeErrors  a = Either TypeError a
 type WithErrors a      = Either ProgError a
 type W a               = ErrorT ProgError (Supply Name) a
 
--- TODO
---   update `inferTypes` to keep a list of all indexed names, and to make
---   sure that any errors are only propagated if *all* definitions of that
---   function fail (in case of `+` indices) or never (in case of `*` indices)
-
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.
 inferTypes :: Prog -> WithErrors TyEnv
-inferTypes (Prog decls) = refreshAllW (supplyFreshNamesW (foldl addType (return []) decls))
+inferTypes (Prog ds) =
+  supplyFreshNamesW (foldl infGrp (return emptyEnv) grps)
   where
-  addType :: W TyEnv -> Decl-> W TyEnv
-  addType env (Decl n exp)
-    = do env <- env ;
-         (t , _) <- inferType exp env ;
-         return (env << (n , t))
+    grps :: [[Decl]]
+    grps = L.groupBy eqNamePrefix ds
+    
+-- |Infers the types for a group, possibly failing.
+infGrp :: W TyEnv -> [Decl] -> W TyEnv
+infGrp env grp = do
+  env <- env;
+  let infs = map (infDecl env) grp
+  let (errs,dcls) = L.partition isError infs
+  foldl (<<!) (return env)
+    $ if L.null dcls then errs else dcls
+  
+-- |Infers the type of a declaration, possibly failing.
+infDecl :: TyEnv -> Decl -> W (Name, Type)
+infDecl env (Decl n e) = inferType e env >>= return . (n,) . fst
+
+-- |Checks if a value in the W monad is an error.
+isError :: W a -> Bool
+isError w = case supplyFreshNamesW w of
+  Left  _ -> True
+  Right _ -> False
+
+-- |Check if the declared functions have equal name prefixes.
+eqNamePrefix :: Decl -> Decl -> Bool
+eqNamePrefix (Decl m _) (Decl n _) = namePrefix m == namePrefix n
+
+-- |Take the prefix of a name.
+namePrefix :: Name -> Name
+namePrefix = takeWhile (/= '+')
 
 -- |Implementation of algorithm W.
 inferType :: Expr -> TyEnv -> W (Type , TySubst)
@@ -49,23 +72,23 @@ inferType exp env = case exp of
   n :@: w     -> handleVar env n
 
   Abs x e     -> do a <- freshW;
-                    (t1 , s1) <- inferType e $ env << (x , a);
+                    (t1 , s1) <- inferType e $ env << (x , a)
                     return (TyArr (apply s1 a) t1 , s1)
 
   App f x     -> do (t1 , s1) <- inferType f $ env
                     (t2 , s2) <- inferType x $ applyEnv s1 env
                     a  <- freshW
                     s3 <- unifyW exp (apply s2 t1) (TyArr t2 a)
-                    return (apply s3 a , fromList [s1,s2,s3])
+                    return (apply s3 a , fromList [s3,s2,s1])
 
   Let x e1 e2 -> do (t1 , s1) <- inferType e1 $ env
                     (t2 , s2) <- inferType e2 $ applyEnv s1 env << (x , t1)
-                    return (t2 , fromList [s1,s2])
+                    return (t2 , fromList [s2,s1])
 
 handleVar :: TyEnv -> Name -> W (Type, TySubst)
 handleVar env n = case findByName n env of
-  (t:_) -> return (t, Nil)
-  [   ] -> throwError (UnboundVariable n)
+  Just t  -> return (t, Nil)
+  Nothing -> throwError (UnboundVariable n)
 
 -- |Lifting of `unify` to the inference monad.
 unifyW :: Expr -> Type -> Type -> W TySubst
@@ -84,24 +107,27 @@ refreshAllW env = env >>= return . refreshAll
 
 -- * Type Environments
 
-type TyEnv = [(Name,Type)]
+type TyEnv = Map Name Type
 
 -- |Inserts an entry into a type environment.
 (<<) :: TyEnv -> (Name,Type) -> TyEnv
-(<<) env (n,t) = (n,t) : env
+(<<) env (n,t) = M.insert n t env
 
 -- |Replaces an entry in a type environment (based on name equality).
-(<<!) :: TyEnv -> (Name,Type) -> TyEnv
-(<<!) env (n,t) = (n,t) : filter ((n /=) . fst) env
+(<<!) :: W TyEnv -> W (Name,Type) -> W TyEnv
+(<<!) env w = do env <- env; (n,t) <- w; return $ env << (n,t)
 
 -- |Applies a function to all types in a type environment.
 mapEnv :: (Type -> Type) -> TyEnv -> TyEnv
-mapEnv f = map (\(n,t) -> (n,f t))
+mapEnv = M.map
 
 -- |Finds all entries for a given name in a type environment.
-findByName :: Name -> TyEnv -> [Type]
-findByName n = map snd . filter ((n ==) . fst)
+findByName :: Name -> TyEnv -> Maybe Type
+findByName = M.lookup
 
+-- |The empty environment.
+emptyEnv :: TyEnv
+emptyEnv = M.empty
 
 
 -- * Fresh Names
@@ -152,15 +178,15 @@ data TySubst
   deriving (Eq,Show)
 
 -- |Performs a single substitution.
-for :: Name -> Type -> Type -> Type
-for x t' c@(TyCon _) = c
-for x t' v@(TyVar y) = if x == y then t' else v
-for x t' (TyArr a b) = TyArr (for x t' a) (for x t' b)
+for :: Type -> Name -> Type -> Type
+for t' x c@(TyCon _) = c
+for t' x v@(TyVar y) = if x == y then t' else v
+for t' x (TyArr a b) = TyArr (for t' x a) (for t' x b)
 
 -- |Applies a substitution to a type.
 apply :: TySubst -> Type -> Type
 apply Nil t = t
-apply (Snoc x t' s) t = for x t' (apply s t)
+apply (Snoc x t' s) t = (for t' x) (apply s t)
 
 -- |Applies a substitution to a type environment.
 applyEnv :: TySubst -> TyEnv -> TyEnv
@@ -177,7 +203,7 @@ andThen (Snoc x t' s1) s2 = Snoc x t' (s1 `andThen` s2)
 
 -- |An alias for substitution sequencing.
 fromList :: [TySubst] -> TySubst
-fromList = foldl andThen Nil
+fromList = foldr andThen Nil
 
 
 

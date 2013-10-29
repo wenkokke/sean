@@ -14,9 +14,6 @@ import Data.List (groupBy)
   are separated by the `+` token. This is a hint to the type inference that
   at least one of these definitions should succeed.
 
-  The other separator that is allowed is `*` or "all these declarations may fail
-  to type check."
-
   |-}
 
 -- |Determines whether or not a program is ambiguous.

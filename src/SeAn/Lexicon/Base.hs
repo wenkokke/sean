@@ -10,7 +10,7 @@ import qualified Data.Maybe as M (fromMaybe)
 -- * Basic abstract syntax tree
 
 data Prog
-   = Prog [Decl]
+   = Prog { decls :: [Decl] }
    deriving (Eq,Show)
 
 data Decl
