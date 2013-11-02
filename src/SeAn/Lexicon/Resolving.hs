@@ -17,7 +17,7 @@ import Data.List (groupBy)
   |-}
 
 -- |Determines whether or not a program is ambiguous.
-isAmbiguous :: Prog -> Bool
+isAmbiguous :: Prog Name -> Bool
 isAmbiguous p = any ((> 1) . fs) ns
   where
     ns = declaredNames p
@@ -26,11 +26,11 @@ isAmbiguous p = any ((> 1) . fs) ns
 -- * Name resolving
 
 -- |Disambiguates a program until a fixed-point is reached.
-resolveProg :: Prog -> Prog
+resolveProg :: Prog Name -> Prog Name
 resolveProg = until (Prelude.not . isAmbiguous) resolveProg1
 
 -- |Disambiguates a program a single step.
-resolveProg1 :: Prog -> Prog
+resolveProg1 :: Prog Name -> Prog Name
 resolveProg1 p@(Prog ds) = Prog ds'
   where
     fs  = freq (declaredNames p)
@@ -38,13 +38,13 @@ resolveProg1 p@(Prog ds) = Prog ds'
     ds' = concatMap (resolveDecl r) (indexDecls ds)
 
 -- |Disambiguates declarations based on name resolvers.
-resolveDecl :: (Name -> [Name]) -> (Decl -> [Decl])
+resolveDecl :: (Name -> [Name]) -> (Decl Name -> [Decl Name])
 resolveDecl r (Decl n e) = do e' <- resolveExpr r e
                               return (Decl n e')
 
 -- |Disambiguates expressions based on name resolvers.
-resolveExpr :: (Name -> [Name]) -> (Expr -> [Expr])
-resolveExpr r (Con n t)     = return (Con n t)
+resolveExpr :: (Name -> [Name]) -> (Expr Name -> [Expr Name])
+resolveExpr r (Con n)       = return (Con n)
 resolveExpr r (Var n)       = do n' <- r n; return (Var n')
 resolveExpr r (Abs n e1)    = do let r' = rebindName n r
                                  e1' <- resolveExpr r' e1
@@ -56,7 +56,7 @@ resolveExpr r (Let n e1 e2) = do let r' = rebindName n r
                                  e1' <- resolveExpr r' e1
                                  e2' <- resolveExpr r' e2
                                  return (Let n e1' e2')
-resolveExpr r (n :@: w)     = do n' <- r n; return (n' :@: w)
+resolveExpr r (Inst n w)    = do n' <- r n; return (Inst n' w)
 
 
 -- |Disambiguates names based on a program.
@@ -76,20 +76,20 @@ rebindName n r m = if m == n then [ m ] else r m
 -- * Indices
 
 -- |Indexes all declarations.
-indexDecls :: [Decl] -> [Decl]
+indexDecls :: [Decl Name] -> [Decl Name]
 indexDecls = concat . map (indexIfAmb 0) . groupBy eqName
   where
-    indexIfAmb :: Int -> [Decl] -> [Decl]
+    indexIfAmb :: Int -> [Decl Name] -> [Decl Name]
     indexIfAmb _ [ ] = [ ]
     indexIfAmb _ [d] = [d]
     indexIfAmb i ds  = indexDecls i ds
 
-    indexDecls :: Int -> [Decl] -> [Decl]
+    indexDecls :: Int -> [Decl Name] -> [Decl Name]
     indexDecls _ [] = []
     indexDecls i (d:ds) = indexDecl i d : indexDecls (i + 1) ds
 
 -- |Indexes a declaration.
-indexDecl :: Int -> Decl -> Decl
+indexDecl :: Int -> Decl Name -> Decl Name
 indexDecl i (Decl n e) = Decl (indexName i n) e
 
 -- |Indexes a single name.
@@ -100,7 +100,7 @@ indexName i n = printf "%s+%d" n i
 -- * Utility functions
 
 -- |Determines whether two declarations declare the same name.
-eqName :: Decl -> Decl -> Bool
+eqName :: Decl Name -> Decl Name -> Bool
 eqName (Decl m _) (Decl n _) = m == n
 
 -- |Calculates frequencies for all elements in a list.
@@ -109,5 +109,5 @@ freq [    ] = \_ -> 0
 freq (x:xs) = \y -> (if x == y then 1 else 0) + freq xs y
 
 -- |Extracts all declared names from a program.
-declaredNames :: Prog -> [Name]
+declaredNames :: Prog Name -> [Name]
 declaredNames (Prog ds) = map (\(Decl n _) -> n) ds

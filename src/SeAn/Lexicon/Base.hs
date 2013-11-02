@@ -9,24 +9,25 @@ import qualified Data.Maybe as M (fromMaybe)
 
 -- * Basic abstract syntax tree
 
-data Prog
-   = Prog { decls :: [Decl] }
-   deriving (Eq,Show)
+data Prog i
+   = Prog { decls :: [Decl i] }
+   deriving (Eq)
 
-data Decl
-   = Decl Name Expr
-   deriving (Eq,Show)
+data Decl i
+   = Decl i (Expr i)
+   deriving (Eq)
 
-data Expr
+data Expr i
   -- expressions
-   = Con Name Type
-   | Var Name
-   | Abs Name Expr
-   | App Expr Expr
-   | Let Name Expr Expr
+   = Con i
+   | Var i
+   | Abs i (Expr i)
+   | App   (Expr i) (Expr i)
+   | Let i (Expr i) (Expr i)
 
-  -- instantiation
-   | Name :@: Name
+  -- holes and instantiation
+   | Hole Type
+   | Inst i Name
    deriving (Eq)
 
 data Type
@@ -58,37 +59,37 @@ instance Show Type where
     wrap ty@(TyArr _ _) = printf "(%s)" (show ty)
     wrap ty             = show ty
 
-instance Show Expr where
-  show (Var n) = n
-  show (Con n t) = printf "%s:%s" n (show (ShortType t))
-  show (App (Con "NOT" _) e1) = printf "~%s" (wrapApp e1)
-  show (App (App (Con "EQUAL" _) e1) e2) = printf "%s == %s"  (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "OR"    _) e1) e2) = printf "%s \\/ %s" (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "AND"   _) e1) e2) = printf "%s /\\ %s" (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "IMPL"  _) e1) e2) = printf "%s -> %s"  (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "EQUIV" _) e1) e2) = printf "%s <-> %s" (wrapBin e1) (wrapBin e2)
-  show (App (Con "FORALL" _) (Abs x e1)) = printf "!%s.%s" x (show e1)
-  show (App (Con "EXISTS" _) (Abs x e1)) = printf "?%s.%s" x (show e1)
-  show (App (Con "IOTA"   _) (Abs x e1)) = printf "i%s.%s" x (show e1)
-  show (Abs x  e1)   = printf "\\%s.%s" x (show e1)
-  show (App e1 e2)   = printf "%s %s" (wrapApp e1) (wrapApp e2)
-  show (Let x e1 e2) = printf "let %s = %s in %s" x (show e1) (show e2)
-  show (n :@: w)     = printf "%s @ %s" n w
+instance Show (Expr Name) where
+  show (Var n) = show n
+  show (App (Con "NOT") e1)             = printf "~%s" (wrapApp e1)
+  show (App (App (Con "EQUAL") e1) e2)  = printf "%s == %s"  (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "OR") e1) e2)     = printf "%s \\/ %s" (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "AND") e1) e2)    = printf "%s /\\ %s" (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "IMPL") e1) e2)   = printf "%s => %s"  (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "EQUIV") e1) e2)  = printf "%s <=> %s" (wrapBin e1) (wrapBin e2)
+  show (App (Con "FORALL") (Abs x e1))  = printf "!%s.%s" x (show e1)
+  show (App (Con "EXISTS") (Abs x e1))  = printf "?%s.%s" x (show e1)
+  show (App (Con "IOTA") (Abs x e1))    = printf "i%s.%s" x (show e1)
+  show (Abs n e1)    = printf "\\%s.%s" n (show e1)
+  show (App   e1 e2) = printf "%s %s" (wrapApp e1) (wrapApp e2)
+  show (Let n e1 e2) = printf "let %s = %s in %s" n (show e1) (show e2)
+  show (Hole t)      = printf "_:%s" (show (ShortType t))
+  show (Inst n w)    = printf "%s @ %s" n w
 
-wrapApp :: Expr -> String
+wrapApp :: Expr Name -> String
 wrapApp e1@(App _ _) = printf "(%s)" (show e1)
 wrapApp e1           = wrapBin e1
 
-wrapBin :: Expr -> String
-wrapBin e1@(Var _  ) = show e1
-wrapBin e1@(Con _ _) = show e1
+wrapBin :: Expr Name -> String
+wrapBin e1@(Var _)   = show e1
+wrapBin e1@(Con _)   = show e1
 wrapBin e1@(App _ _) = show e1
 wrapBin e1           = printf "(%s)" (show e1)
 
 -- * Utility methods for construction of complex terms
 
 -- |Constructs a known constant from name.
-con n = Con n (typeOf n)
+con n = Con n
 
 -- |Constructs an N-ary lambda abstraction.
 abs xs e = foldr Abs e xs

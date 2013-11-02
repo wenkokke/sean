@@ -12,18 +12,20 @@ import qualified Data.Map as M
 
 import Data.Maybe (fromJust)
 
-import Text.ParserCombinators.UU
-import Text.ParserCombinators.UU.BasicInstances
-import Text.ParserCombinators.UU.Idioms
-import Text.ParserCombinators.UU.Utils
+import Text.ParserCombinators.UU ((<$),(<$>),(<*>),(*>),(<|>),(<?>)
+  ,empty,pMany,pList1,pListSep,pList1Sep,pChainl,pChainl_ng)
+import Text.ParserCombinators.UU.BasicInstances (Parser,pSym)
+import Text.ParserCombinators.UU.Idioms (iI,Ii (..))
+import Text.ParserCombinators.UU.Utils (runParser,pSpaces,lexeme
+  ,pSymbol,pParens,pLetter,pDigit,pAnySym)
 
-parseProg :: String -> Prog
+parseProg :: String -> Prog Name
 parseProg = runParser "stdin" pProg
 
-parseDecl :: String -> Decl
+parseDecl :: String -> Decl Name
 parseDecl = runParser "stdin" pDecl
 
-parseExpr :: String -> Expr
+parseExpr :: String -> Expr Name
 parseExpr = runParser "stdin" pExpr
 
 parseType :: String -> Type
@@ -32,22 +34,22 @@ parseType = runParser "stdin" pType
 parseShortType :: String -> Type
 parseShortType = runParser "stdin" pShortType
 
-pProg :: Parser Prog
+pProg :: Parser (Prog Name)
 pProg = pSpaces *> iI Prog pDecls Ii
 
-pDecl :: Parser Decl
+pDecl :: Parser (Decl Name)
 pDecl = iI decl pName pNames '=' (lexeme pExpr) Ii      <?> "declaration"
 
-pDecls :: Parser [Decl]
+pDecls :: Parser [Decl Name]
 pDecls = pList1 (iI pDecl ';' Ii)
 
-pExpr :: Parser Expr
+pExpr :: Parser (Expr Name)
 pExpr = pLet <|> pGAbs <|> pBin
   where
   -- parse simple terms
-  pHole = iI (Con "_") '_' ':' pShortType Ii            <?> "hole"
+  pHole = iI Hole '_' ':' pShortType Ii                 <?> "hole"
   pVar  = iI Var pName Ii                               <?> "variable"
-  pInst = iI (:@:) pName '@' pName Ii                   <?> "hole instantiation"
+  pInst = iI Inst pName '@' pName Ii                   <?> "hole instantiation"
   pPos  = pHole <|> pInst <|> pVar <|> pParens pExpr
   pNeg  = iI not '~' pPos Ii                            <?> "negation"
   pAtom = pPos <|> pNeg                                 <?> "atomic expression"

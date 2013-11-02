@@ -28,15 +28,15 @@ type W a               = ErrorT ProgError (Supply Name) a
 
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.
-inferTypes :: Prog -> WithErrors TyEnv
+inferTypes :: Prog Name -> WithErrors TyEnv
 inferTypes (Prog ds) =
   supplyFreshNamesW (foldl infGrp (return emptyEnv) grps)
   where
-    grps :: [[Decl]]
+    grps :: [[Decl Name]]
     grps = L.groupBy eqNamePrefix ds
     
 -- |Infers the types for a group, possibly failing.
-infGrp :: W TyEnv -> [Decl] -> W TyEnv
+infGrp :: W TyEnv -> [Decl Name] -> W TyEnv
 infGrp env grp = do
   env <- env;
   let infs = map (infDecl env) grp
@@ -45,7 +45,7 @@ infGrp env grp = do
     $ if L.null dcls then errs else dcls
   
 -- |Infers the type of a declaration, possibly failing.
-infDecl :: TyEnv -> Decl -> W (Name, Type)
+infDecl :: TyEnv -> Decl Name -> W (Name, Type)
 infDecl env (Decl n e) = inferType e env >>= return . (n,) . fst
 
 -- |Checks if a value in the W monad is an error.
@@ -55,7 +55,7 @@ isError w = case supplyFreshNamesW w of
   Right _ -> False
 
 -- |Check if the declared functions have equal name prefixes.
-eqNamePrefix :: Decl -> Decl -> Bool
+eqNamePrefix :: Decl Name -> Decl Name -> Bool
 eqNamePrefix (Decl m _) (Decl n _) = namePrefix m == namePrefix n
 
 -- |Take the prefix of a name.
@@ -63,13 +63,14 @@ namePrefix :: Name -> Name
 namePrefix = takeWhile (/= '+')
 
 -- |Implementation of algorithm W.
-inferType :: Expr -> TyEnv -> W (Type , TySubst)
+inferType :: Expr Name -> TyEnv -> W (Type , TySubst)
 inferType exp env = case exp of
 
-  Con n t     -> return (t , Nil)
+  Con n       -> return (typeOf n , Nil)
 
-  Var n       -> handleVar env n
-  n :@: w     -> handleVar env n
+  Var n       -> case findByName n env of
+                  Just t  -> return (t, Nil)
+                  Nothing -> throwError (UnboundVariable n)
 
   Abs x e     -> do a <- freshW;
                     (t1 , s1) <- inferType e $ env << (x , a)
@@ -85,13 +86,14 @@ inferType exp env = case exp of
                     (t2 , s2) <- inferType e2 $ applyEnv s1 env << (x , t1)
                     return (t2 , fromList [s2,s1])
 
-handleVar :: TyEnv -> Name -> W (Type, TySubst)
-handleVar env n = case findByName n env of
-  Just t  -> return (t, Nil)
-  Nothing -> throwError (UnboundVariable n)
+  Hole t      -> return (t, Nil)
+  
+  Inst n w    -> case findByName n env of
+                  Just t  -> return (t, Nil)
+                  Nothing -> throwError (UnboundVariable n)
 
 -- |Lifting of `unify` to the inference monad.
-unifyW :: Expr -> Type -> Type -> W TySubst
+unifyW :: Expr Name -> Type -> Type -> W TySubst
 unifyW exp t1 t2 = case unify t1 t2 of
   Left  e -> throwError (TypeErrorIn exp e)
   Right s -> return s
@@ -173,8 +175,7 @@ refreshAll = mapEnv refresh
 -- * Type Substitutions
 
 data TySubst
-  = Nil
-  | Snoc Name Type TySubst
+  = Nil | Snoc Name Type TySubst
   deriving (Eq,Show)
 
 -- |Performs a single substitution.
@@ -262,10 +263,10 @@ instance Show TypeError where
 
 -- |Representation for possible errors in algorithm W.
 data ProgError
-  = UnknownConstant Name           -- ^ thrown when unknown constant is encountered
-  | UnboundVariable Name           -- ^ thrown when unbound variable is encountered
-  | TypeErrorIn     Expr TypeError -- ^ thrown when types of expressions cannot be unified
-  | MiscProgError   String         -- ^ stores miscellaneous errors
+  = UnknownConstant Name                  -- ^ thrown when unknown constant is encountered
+  | UnboundVariable Name                  -- ^ thrown when unbound variable is encountered
+  | TypeErrorIn     (Expr Name) TypeError -- ^ thrown when types of expressions cannot be unified
+  | MiscProgError   String                -- ^ stores miscellaneous errors
   deriving Eq
 
 instance Error ProgError where
