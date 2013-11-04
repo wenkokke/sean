@@ -45,16 +45,17 @@ type TyName = Name
 
 -- * Utility methods for printing terms
 
-instance Show (Prog Name) where
+instance IsName n => Show (Prog n) where
   show (Prog ds) = unlines (map show ds)
 
-instance Show (Decl Name) where
-  show (Decl n e) = printf "%s = %s" n (show e)
+instance IsName n => Show (Decl n) where
+  show (Decl n e) = printf "%s = %s" (collapse n) (show e)
 
 instance Show ShortType where
   show (ShortType ty) = show ty
     where
     show (TyCon n)      = fmap toLower n
+    show (TyVar n)      = n
     show (TyArr a b)    = printf "%s%s" (wrap a) (wrap b)
     wrap ty@(TyArr _ _) = printf "(%s)" (show ty)
     wrap ty             = show ty
@@ -67,32 +68,36 @@ instance Show Type where
     wrap ty@(TyArr _ _) = printf "(%s)" (show ty)
     wrap ty             = show ty
 
-instance Show (Expr Name) where
-  show (Var n) = n
-  show (App (Con "NOT") e1)              = printf "~%s" (wrapApp e1)
-  show (App (App (Con "EQUAL") e1) e2)   = printf "%s == %s"  (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "OR") e1) e2)      = printf "%s \\/ %s" (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "AND") e1) e2)     = printf "%s /\\ %s" (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "IMPLIES") e1) e2) = printf "%s => %s"  (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "EQUIV") e1) e2)   = printf "%s <=> %s" (wrapBin e1) (wrapBin e2)
-  show (App (Con "FORALL") (Abs x e1))   = printf "!%s.%s" x (show e1)
-  show (App (Con "EXISTS") (Abs x e1))   = printf "?%s.%s" x (show e1)
-  show (App (Con "IOTA") (Abs x e1))     = printf "i%s.%s" x (show e1)
-  show (Abs n e1)    = printf "\\%s.%s" n (show e1)
-  show (App   e1 e2) = printf "%s %s" (wrapApp e1) (wrapApp e2)
-  show (Let n e1 e2) = printf "let %s = %s in %s" n (show e1) (show e2)
-  show (Hole t)      = printf "_:%s" (show (ShortType t))
-  show (Inst n w)    = printf "%s @ %s" n w
+instance IsName n => Show (Expr n) where
+  show = show1 . mapNames collapse
+    where
+      show1 :: Expr Name -> String
+      show1 (Var n) = n
+      show1 (Con n) = n
+      show1 (App (Con "NOT") e1)              = printf "~%s" (wrap1 e1)
+      show1 (App (App (Con "EQUAL") e1) e2)   = printf "%s == %s"  (wrap2 e1) (wrap2 e2)
+      show1 (App (App (Con "OR") e1) e2)      = printf "%s \\/ %s" (wrap2 e1) (wrap2 e2)
+      show1 (App (App (Con "AND") e1) e2)     = printf "%s /\\ %s" (wrap2 e1) (wrap2 e2)
+      show1 (App (App (Con "IMPLIES") e1) e2) = printf "%s => %s"  (wrap2 e1) (wrap2 e2)
+      show1 (App (App (Con "EQUIV") e1) e2)   = printf "%s <=> %s" (wrap2 e1) (wrap2 e2)
+      show1 (App (Con "FORALL") (Abs x e1))   = printf "!%s.%s" x (show1 e1)
+      show1 (App (Con "EXISTS") (Abs x e1))   = printf "?%s.%s" x (show1 e1)
+      show1 (App (Con "IOTA") (Abs x e1))     = printf "i%s.%s" x (show1 e1)
+      show1 (Abs n e1)    = printf "\\%s.%s" n (show1 e1)
+      show1 (App   e1 e2) = printf "%s %s" (wrap1 e1) (wrap1 e2)
+      show1 (Let n e1 e2) = printf "let %s = %s in %s" n (show1 e1) (show1 e2)
+      show1 (Hole t)      = printf "_:%s" (show (ShortType t))
+      show1 (Inst n w)    = printf "%s @ %s" n w
 
-wrapApp :: Expr Name -> String
-wrapApp e1@(App _ _) = printf "(%s)" (show e1)
-wrapApp e1           = wrapBin e1
+      wrap1 :: Expr Name -> String
+      wrap1 e1@(App _ _) = printf "(%s)" (show1 e1)
+      wrap1 e1           = wrap2 e1
 
-wrapBin :: Expr Name -> String
-wrapBin e1@(Var _)   = show e1
-wrapBin e1@(Con _)   = show e1
-wrapBin e1@(App _ _) = show e1
-wrapBin e1           = printf "(%s)" (show e1)
+      wrap2 :: Expr Name -> String
+      wrap2 e1@(Var _)   = show1 e1
+      wrap2 e1@(Con _)   = show1 e1
+      wrap2 e1@(App _ _) = show1 e1
+      wrap2 e1           = printf "(%s)" (show1 e1)
 
 -- * Utility methods for construction of complex terms
 
@@ -188,6 +193,7 @@ instance HasNames Expr where
 -- |Get all declared names from a program.
 declaredNames :: Prog n -> [n]
 declaredNames (Prog ds) = map (\(Decl n _) -> n) ds
+
 
 -- * Base and complex names
 

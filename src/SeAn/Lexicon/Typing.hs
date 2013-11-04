@@ -29,73 +29,71 @@ type W a n = ErrorT (ProgError n) (Supply TyName) a
 
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.
-inferTypes :: IsName n => Prog n -> WithErrors (Env n) n
-inferTypes (Prog ds) = refreshAllW (supplyFreshNamesW (foldl infGrp (return emptyEnv) grps))
+inferTypes :: IsName n => Prog n -> WithErrors (Env n, [Decl (n,Type)]) n
+inferTypes (Prog ds) =
+  supplyFreshNamesW (foldl inferGroupTypes initial groups)
   where
-    grps = L.groupBy eqName ds
-
--- |Lifting of `supplyFreshNames` to the inference monad.
-supplyFreshNamesW :: W a n -> WithErrors a n
-supplyFreshNamesW m = evalSupply (runErrorT m) freshNames
-
--- |Stream of simple names.
-freshNames :: [TyName]
-freshNames = letters ++ numbers
-  where
-  letters    = fmap (: []) (['A'..'D'] ++ ['F'..'S'] ++ ['U'..'Z'])
-  numbers    = fmap (('T' :) . show) [0..]
-
--- |Lifting of `refreshAll` to the inference monad.
-refreshAllW :: WithErrors (Env n) n -> WithErrors (Env n) n
-refreshAllW env = env >>= return . refreshAll
+    groups = L.groupBy eqName ds
+    initial :: W (Env n, [Decl (n,Type)]) n
+    initial = return (emptyEnv, [])
 
 -- |Infers the types for a group of declarations, possibly failing.
-infGrp :: IsName n => W (Env n) n -> [Decl n] -> W (Env n) n
-infGrp env grp = do
-  env <- env
-  let infs = map (infDecl env) grp
-  let (errs,dcls) = L.partition isError infs
-  foldl (<<!) (return env)
-    $ if L.null dcls then errs else dcls
+inferGroupTypes :: IsName n
+  => W (Env n,[Decl (n,Type)]) n -- ^ Initial result.
+  -> [Decl n]                    -- ^ Next group use for type inference.
+  -> W (Env n,[Decl (n,Type)]) n -- ^ Updated result.
+inferGroupTypes rsl grp = do
+  (env,ds) <- rsl
+  let inferences = map (\d -> inferDeclType d env) grp
+  let (errors,types) = L.partition isError inferences
+  foldl updateW rsl
+    $ if L.null types then errors else types
+  where
+    update (env,ds) d@(Decl (n,ty) e) = (env << (n,ty), d:ds)
+    updateW rsl d = do rsl' <- rsl; d' <- d; return (update rsl' d')
+
 
 -- |Infers the type of a declaration, possibly failing.
-infDecl :: IsName n => Env n -> Decl n -> W (n,Type) n
-infDecl env (Decl n e) = inferType e env >>= return . (n,) . fst
+inferDeclType :: IsName n => Decl n -> Env n ->  W (Decl (n,Type)) n
+inferDeclType (Decl n e) env = do
+  (e',ty,_) <- inferExprType e env
+  return (Decl (n,ty) e')
 
 -- |Checks if a value in the W monad is an error.
 isError :: W a n -> Bool
-isError w = case supplyFreshNamesW w of
-  Left  _ -> True
-  Right _ -> False
+isError = either (const True) (const False) . supplyFreshNamesW
 
 -- |Implementation of algorithm W.
-inferType :: IsName n => Expr n -> Env n -> W (Type,TySubst) n
-inferType exp env = case exp of
+inferExprType :: IsName n => Expr n -> Env n -> W (Expr (n,Type), Type, TySubst) n
+inferExprType exp env = case exp of
 
-  Con n       -> return (typeOf . base $ n , Nil)
+  Con n       -> do let ty = typeOf (base n)
+                    return (Con (n,ty), ty, Nil)
 
   Var n       -> case findByName n env of
-                  Just t  -> return (t, Nil)
+                  Just ty -> return (Var (n,ty), ty, Nil)
                   Nothing -> throwError (UnboundVariable n)
 
   Abs x e     -> do a <- freshW;
-                    (t1 , s1) <- inferType e $ env << (x , a)
-                    return (TyArr (apply s1 a) t1 , s1)
+                    (e', t1, s1) <- inferExprType e $ env << (x , a)
+                    let a' = apply s1 a
+                    return (Abs (x,a') e', TyArr a' t1 , s1)
 
-  App f x     -> do (t1 , s1) <- inferType f $ env
-                    (t2 , s2) <- inferType x $ applyEnv s1 env
+  App f x     -> do (f', t1 , s1) <- inferExprType f $ env
+                    (x', t2 , s2) <- inferExprType x $ applyEnv s1 env
                     a  <- freshW
                     s3 <- unifyW exp (apply s2 t1) (TyArr t2 a)
-                    return (apply s3 a , fromList [s3,s2,s1])
+                    let a' = apply s3 a
+                    return (App f' x', a', fromList [s3,s2,s1])
 
-  Let x e1 e2 -> do (t1 , s1) <- inferType e1 $ env
-                    (t2 , s2) <- inferType e2 $ applyEnv s1 env << (x , t1)
-                    return (t2 , fromList [s2,s1])
+  Let x e1 e2 -> do (e1', t1 , s1) <- inferExprType e1 $ env
+                    (e2', t2 , s2) <- inferExprType e2 $ applyEnv s1 env << (x , t1)
+                    return (Let (x,t1) e1' e2', t2, fromList [s2,s1])
 
-  Hole t      -> return (t, Nil)
+  Hole t      -> return (Hole t, t, Nil)
 
   Inst n w    -> case findByName n env of
-                  Just t  -> return (t, Nil)
+                  Just ty -> return (Inst (n,ty) w, ty, Nil)
                   Nothing -> throwError (UnboundVariable n)
 
 -- |Lifting of `unify` to the inference monad.
@@ -129,7 +127,7 @@ emptyEnv :: (Env n)
 emptyEnv = M.empty
 
 
--- * Fresh ns
+-- * Fresh names
 
 -- |Generates a fresh type variables.
 fresh :: NeedsFreshNames Type
@@ -143,6 +141,17 @@ freshW = lift fresh
 --  reducing it to just an @Either@ value containing perhaps a TypeError.
 supplyFreshNames :: NeedsFreshNames a -> a
 supplyFreshNames m = evalSupply m freshNames
+
+-- |Lifting of `supplyFreshNames` to the inference monad.
+supplyFreshNamesW :: W a n -> WithErrors a n
+supplyFreshNamesW m = evalSupply (runErrorT m) freshNames
+
+-- |Stream of simple names.
+freshNames :: [TyName]
+freshNames = letters ++ numbers
+  where
+  letters    = fmap (: []) (['A'..'D'] ++ ['F'..'S'] ++ ['U'..'Z'])
+  numbers    = fmap (('T' :) . show) [0..]
 
 -- |Replaces every type variable with a fresh one.
 refresh :: Type -> Type
@@ -159,6 +168,10 @@ refresh = supplyFreshNames . lazyRefresh
 -- |Refreshes all entries in a type environment.
 refreshAll :: Env n -> Env n
 refreshAll = mapEnv refresh
+
+-- |Lifting of `refreshAll` to the inference monad.
+refreshAllW :: WithErrors (Env n) n -> WithErrors (Env n) n
+refreshAllW env = env >>= return . refreshAll
 
 
 
