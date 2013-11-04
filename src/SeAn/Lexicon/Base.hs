@@ -4,7 +4,7 @@ module SeAn.Lexicon.Base where
 import Text.Printf (printf)
 import Data.Char (toLower)
 import Data.Map (Map)
-import qualified Data.Map as M (insert,lookup,empty)
+import qualified Data.Map as M (insert,lookup,empty,member)
 import qualified Data.Maybe as M (fromMaybe)
 
 -- * Basic abstract syntax tree
@@ -150,25 +150,30 @@ bins =
   , [("<=>", bin "IFF")]
   ]
 
+reserved :: Map Name Type
+reserved
+  = M.insert "TRUE"    (t)
+  $ M.insert "FALSE"   (t)
+  $ M.insert "NOT"     (t ~> t)
+  $ M.insert "AND"     (t ~> t ~> t)
+  $ M.insert "OR"      (t ~> t ~> t)
+  $ M.insert "IMPLIES" (t ~> t ~> t)
+  $ M.insert "IFF"     (t ~> t ~> t)
+  $ M.insert "EQ"      (e ~> e ~> t)
+  $ M.insert "FORALL"  ((e ~> t) ~> t)
+  $ M.insert "EXISTS"  ((e ~> t) ~> t)
+  $ M.insert "IOTA"    ((e ~> t) ~> e)
+  $ M.empty
+  where
+    infixr 4 ~>
+    ((~>),e,t) = (TyArr, TyCon "e", TyCon "t")
+
+isReservedName :: Name -> Bool
+isReservedName n = M.member n reserved
+
 -- |Maps constants to their type by their @Name@.
 typeOf :: Name -> Type
-typeOf n = M.fromMaybe (error $ "Undefined constant " ++ n)
-         . M.lookup n
-         $ M.insert "TRUE"    (t)
-         $ M.insert "FALSE"   (t)
-         $ M.insert "NOT"     (t ~> t)
-         $ M.insert "AND"     (t ~> t ~> t)
-         $ M.insert "OR"      (t ~> t ~> t)
-         $ M.insert "IMPLIES" (t ~> t ~> t)
-         $ M.insert "IFF"     (t ~> t ~> t)
-         $ M.insert "EQ"      (e ~> e ~> t)
-         $ M.insert "FORALL"  ((e ~> t) ~> t)
-         $ M.insert "EXISTS"  ((e ~> t) ~> t)
-         $ M.insert "IOTA"    ((e ~> t) ~> e)
-         $ M.empty
-         where
-         infixr 4 ~>
-         ((~>),e,t) = (TyArr, TyCon "e", TyCon "t")
+typeOf n = M.fromMaybe (error $ "Undefined constant " ++ n) . M.lookup n $ reserved
 
 -- |Maps functions over all names in a program.
 class HasNames p where
@@ -202,19 +207,23 @@ type Label = [Int]
 class Ord n => IsName n where
   base :: n -> Name
   collapse :: n -> Name
+  settype :: n -> Type -> n
 
 instance IsName Name where
   base = id
   collapse = id
+  settype = const
 
 instance IsName n => IsName (n,Label) where
   base = base . fst
   collapse (n,[]) = collapse n
   collapse (n,ls) = collapse n ++ "#" ++ concatMap show ls
+  settype (n,ls) t = (settype n t,ls)
 
 instance IsName n => IsName (n,Type) where
   base = base . fst
   collapse (n,ty) = collapse n ++ ":" ++ show (ShortType ty)
+  settype (n,_) ty = (settype n ty,ty)
 
 -- * Comparing declarations
 

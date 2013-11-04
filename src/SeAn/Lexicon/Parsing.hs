@@ -34,11 +34,28 @@ parseType = runParser "stdin" pType
 parseShortType :: String -> Type
 parseShortType = runParser "stdin" pShortType
 
+-- |Decide whether something is a bound or a free variable, and change
+--  the constructor accordingly. Separated to avoid monadic parsers.
+setConOrVar :: Eq n => [n] -> Expr n -> Expr n
+setConOrVar ns exp = let
+
+  rewrap n = if n `elem` ns then Var n else Con n
+
+  in case exp of
+  Con  n       -> rewrap n
+  Var  n       -> rewrap n
+  Abs  n e     -> Abs n (setConOrVar (n:ns) e)
+  App    e1 e2 -> App (setConOrVar ns e1) (setConOrVar ns e2)
+  Let  n e1 e2 -> Let n (setConOrVar ns e1) (setConOrVar (n:ns) e2)
+  Hole t       -> Hole t
+  Inst n a     -> Inst n a
+
+
 pProg :: Parser (Prog Name)
 pProg = pSpaces *> iI Prog pDecls Ii
 
 pDecl :: Parser (Decl Name)
-pDecl = iI decl pName pNames '=' (lexeme pExpr) Ii      <?> "declaration"
+pDecl = iI decl pName pNames '=' (lexeme (setConOrVar [] <$> pExpr)) Ii <?> "declaration"
 
 pDecls :: Parser [Decl Name]
 pDecls = pList1 (iI pDecl ';' Ii)
@@ -49,7 +66,7 @@ pExpr = pLet <|> pGAbs <|> pBin
   -- parse simple terms
   pHole = iI Hole '_' ':' pShortType Ii                 <?> "hole"
   pVar  = iI Var pName Ii                               <?> "variable"
-  pInst = iI Inst pName '@' pName Ii                   <?> "hole instantiation"
+  pInst = iI Inst pName '@' pName Ii                    <?> "hole instantiation"
   pPos  = pHole <|> pInst <|> pVar <|> pParens pExpr
   pNeg  = iI not '~' pPos Ii                            <?> "negation"
   pAtom = pPos <|> pNeg                                 <?> "atomic expression"

@@ -3,20 +3,15 @@
 module SeAn.Lexicon.Typing where
 
 import SeAn.Lexicon.Base
-import SeAn.Lexicon.Parsing (parseType)
-
 import Text.Printf (printf)
-
 import Data.Monoid
 import Data.Traversable (forM)
-
 import Data.Map (Map)
 import qualified Data.Map as M
 import qualified Data.Traversable as M
 import qualified Data.List as L
 import qualified Data.Traversable as L
 import Data.Either (lefts,rights)
-
 import Control.Arrow ((***))
 import Control.Monad.Error (Error (..),ErrorT,runErrorT,throwError,catchError)
 import Control.Monad.Supply (Supply,supply,evalSupply)
@@ -68,8 +63,12 @@ isError = either (const True) (const False) . supplyFreshNamesW
 inferExprType :: IsName n => Expr n -> Env n -> W (Expr (n,Type), Type, TySubst) n
 inferExprType exp env = case exp of
 
-  Con n       -> do let ty = typeOf (base n)
-                    return (Con (n,ty), ty, Nil)
+  Con n       -> if isReservedName (base n)
+                    then do let ty = typeOf (base n)
+                            return (Con (n,ty), ty, Nil)
+                    else case findByName n env of
+                  Just ty -> return (Con (n,ty), ty, Nil)
+                  Nothing -> throwError (UnboundVariable n)
 
   Var n       -> case findByName n env of
                   Just ty -> return (Var (n,ty), ty, Nil)

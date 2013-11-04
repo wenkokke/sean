@@ -32,11 +32,11 @@ labelZero :: HasNames p => p a -> p (a,Label)
 labelZero = mapNames (\n -> (n,[]))
 
 -- |Disambiguate a program until a fixed-point is reached.
-resolveProg :: (Show n, Eq n) => Prog n -> Prog (n,Label)
+resolveProg :: IsName n => Prog n -> Prog (n,Label)
 resolveProg = until (not . isAmbiguous) resolveProg1 . labelZero
 
 -- |Disambiguate a program a single step, not resolving arising ambiguities.
-resolveProg1 :: (Show n, Eq n) => Prog (n,Label) -> Prog (n,Label)
+resolveProg1 :: IsName n => Prog (n,Label) -> Prog (n,Label)
 resolveProg1 p@(Prog decs) = Prog decs'
   where
     names = declaredNames p
@@ -45,14 +45,16 @@ resolveProg1 p@(Prog decs) = Prog decs'
     decs' = concatMap (resolveDecl resol) (relabelDecls decs)
 
 -- |Disambiguate declarations based on name resolvers.
-resolveDecl :: Eq n => Resolver n -> (Decl (n,Label) -> [Decl (n,Label)])
+resolveDecl :: IsName n => Resolver n -> (Decl (n,Label) -> [Decl (n,Label)])
 resolveDecl r (Decl n e) = resolveExpr r e >>= return . Decl n
 
 -- |Disambiguate expressions based on name resolvers.
-resolveExpr :: Eq n => Resolver n -> (Expr (n,Label) -> [Expr (n,Label)])
-resolveExpr r (Con n)        = do return (Con n)
-resolveExpr r (Var n)        = do n' <- r n
-                                  return (Var n)
+resolveExpr :: IsName n => Resolver n -> (Expr (n,Label) -> [Expr (n,Label)])
+resolveExpr r (Con n)
+  | isReservedName (base n)  = return (Con n)
+  | otherwise                = do n' <- r n
+                                  return (Con n)
+resolveExpr r (Var n)        = do return (Var n)
 resolveExpr r (Abs n e)      = do let r' = bindName n r
                                   e' <- resolveExpr r' e
                                   return (Abs n e')
@@ -68,9 +70,9 @@ resolveExpr r (Inst n w)     = do n' <- r n
                                   return (Inst n' w)
 
 -- |Disambiguates names based on a program.
-resolveName :: (Show n, Eq n) => Frequency (n,Label) -> Resolver n
+resolveName :: IsName n => Frequency (n,Label) -> Resolver n
 resolveName freqs n
-  | k <= 0 = error ("labelName: unbound name " ++ show n)
+  | k <= 0 = error ("labelName: unbound name " ++ collapse n)
   | k == 1 = [ n ]
   | k >= 2 = map (\i -> addIndexToName i n) [0 .. k - 1]
   where
