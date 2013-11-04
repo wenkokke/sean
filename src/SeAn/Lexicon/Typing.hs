@@ -17,6 +17,7 @@ import qualified Data.List as L
 import qualified Data.Traversable as L
 import Data.Either (lefts,rights)
 
+import Control.Arrow ((***))
 import Control.Monad.Error (Error (..),ErrorT,runErrorT,throwError,catchError)
 import Control.Monad.Supply (Supply,supply,evalSupply)
 import Control.Monad.Trans (lift)
@@ -31,7 +32,7 @@ type W a n = ErrorT (ProgError n) (Supply TyName) a
 --  declaration an available expression in the next.
 inferTypes :: IsName n => Prog n -> WithErrors (Env n, [Decl (n,Type)]) n
 inferTypes (Prog ds) =
-  supplyFreshNamesW (foldl inferGroupTypes initial groups)
+  refreshAllW (supplyFreshNamesW (foldl inferGroupTypes initial groups))
   where
     groups = L.groupBy eqName ds
     initial :: W (Env n, [Decl (n,Type)]) n
@@ -170,8 +171,9 @@ refreshAll :: Env n -> Env n
 refreshAll = mapEnv refresh
 
 -- |Lifting of `refreshAll` to the inference monad.
-refreshAllW :: WithErrors (Env n) n -> WithErrors (Env n) n
-refreshAllW env = env >>= return . refreshAll
+refreshAllW :: WithErrors (Env n,[Decl (n,Type)]) n -> WithErrors (Env n,[Decl (n,Type)]) n
+refreshAllW r = do (env,ds) <- r
+                   return (refreshAll env, map (mapNames (id *** refresh)) ds)
 
 
 
