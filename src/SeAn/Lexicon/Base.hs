@@ -9,39 +9,47 @@ import qualified Data.Maybe as M (fromMaybe)
 
 -- * Basic abstract syntax tree
 
-data Prog i
-   = Prog { decls :: [Decl i] }
+data Prog n
+   = Prog { decls :: [Decl n] }
    deriving (Eq)
 
-data Decl i
-   = Decl i (Expr i)
+data Decl n
+   = Decl n (Expr n)
    deriving (Eq)
 
-data Expr i
+data Expr n
   -- expressions
-   = Con i
-   | Var i
-   | Abs i (Expr i)
-   | App   (Expr i) (Expr i)
-   | Let i (Expr i) (Expr i)
+   = Con n
+   | Var n
+   | Abs n (Expr n)
+   | App   (Expr n) (Expr n)
+   | Let n (Expr n) (Expr n)
 
   -- holes and instantiation
    | Hole Type
-   | Inst i Name
+   | Inst n Name
    deriving (Eq)
 
 data Type
-   = TyCon Name
-   | TyVar Name
+   = TyCon TyName
+   | TyVar TyName
    | TyArr Type Type
-   deriving (Eq)
+   deriving (Eq,Ord)
 
 newtype ShortType
    = ShortType Type
+   deriving (Eq,Ord)
 
 type Name = String
+type TyName = Name
 
 -- * Utility methods for printing terms
+
+instance Show (Prog Name) where
+  show (Prog ds) = unlines (map show ds)
+
+instance Show (Decl Name) where
+  show (Decl n e) = printf "%s = %s" n (show e)
 
 instance Show ShortType where
   show (ShortType ty) = show ty
@@ -60,16 +68,16 @@ instance Show Type where
     wrap ty             = show ty
 
 instance Show (Expr Name) where
-  show (Var n) = show n
-  show (App (Con "NOT") e1)             = printf "~%s" (wrapApp e1)
-  show (App (App (Con "EQUAL") e1) e2)  = printf "%s == %s"  (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "OR") e1) e2)     = printf "%s \\/ %s" (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "AND") e1) e2)    = printf "%s /\\ %s" (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "IMPL") e1) e2)   = printf "%s => %s"  (wrapBin e1) (wrapBin e2)
-  show (App (App (Con "EQUIV") e1) e2)  = printf "%s <=> %s" (wrapBin e1) (wrapBin e2)
-  show (App (Con "FORALL") (Abs x e1))  = printf "!%s.%s" x (show e1)
-  show (App (Con "EXISTS") (Abs x e1))  = printf "?%s.%s" x (show e1)
-  show (App (Con "IOTA") (Abs x e1))    = printf "i%s.%s" x (show e1)
+  show (Var n) = n
+  show (App (Con "NOT") e1)              = printf "~%s" (wrapApp e1)
+  show (App (App (Con "EQUAL") e1) e2)   = printf "%s == %s"  (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "OR") e1) e2)      = printf "%s \\/ %s" (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "AND") e1) e2)     = printf "%s /\\ %s" (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "IMPLIES") e1) e2) = printf "%s => %s"  (wrapBin e1) (wrapBin e2)
+  show (App (App (Con "EQUIV") e1) e2)   = printf "%s <=> %s" (wrapBin e1) (wrapBin e2)
+  show (App (Con "FORALL") (Abs x e1))   = printf "!%s.%s" x (show e1)
+  show (App (Con "EXISTS") (Abs x e1))   = printf "?%s.%s" x (show e1)
+  show (App (Con "IOTA") (Abs x e1))     = printf "i%s.%s" x (show e1)
   show (Abs n e1)    = printf "\\%s.%s" n (show e1)
   show (App   e1 e2) = printf "%s %s" (wrapApp e1) (wrapApp e2)
   show (Let n e1 e2) = printf "let %s = %s in %s" n (show e1) (show e2)
@@ -156,3 +164,54 @@ typeOf n = M.fromMaybe (error $ "Undefined constant " ++ n)
          where
          infixr 4 ~>
          ((~>),e,t) = (TyArr, TyCon "e", TyCon "t")
+
+-- |Maps functions over all names in a program.
+class HasNames p where
+  mapNames :: (a -> b) -> p a -> p b
+
+instance HasNames Prog where
+  mapNames f (Prog ds) = Prog (map (mapNames f) ds)
+
+instance HasNames Decl where
+  mapNames f (Decl n e) = Decl (f n) (mapNames f e)
+
+instance HasNames Expr where
+  mapNames f (Con n)       = Con (f n)
+  mapNames f (Var n)       = Var (f n)
+  mapNames f (Abs n e1)    = Abs (f n) (mapNames f e1)
+  mapNames f (App e1 e2)   = App (mapNames f e1) (mapNames f e2)
+  mapNames f (Let n e1 e2) = Let (f n) (mapNames f e1) (mapNames f e2)
+  mapNames f (Hole t)      = Hole t
+  mapNames f (Inst n w)    = Inst (f n) w
+
+
+-- |Get all declared names from a program.
+declaredNames :: Prog n -> [n]
+declaredNames (Prog ds) = map (\(Decl n _) -> n) ds
+
+-- * Base and complex names
+
+type Label = [Int]
+
+class Ord n => IsName n where
+  base :: n -> Name
+  collapse :: n -> Name
+
+instance IsName Name where
+  base = id
+  collapse = id
+
+instance IsName n => IsName (n,Label) where
+  base = base . fst
+  collapse (n,[]) = collapse n
+  collapse (n,ls) = collapse n ++ "#" ++ concatMap show ls
+
+instance IsName n => IsName (n,Type) where
+  base = base . fst
+  collapse (n,ty) = collapse n ++ ":" ++ show (ShortType ty)
+
+-- * Comparing declarations
+
+-- |Check if two declarations define the same constant.
+eqName :: Eq n => Decl n -> Decl n -> Bool
+eqName (Decl m _) (Decl n _) = m == n

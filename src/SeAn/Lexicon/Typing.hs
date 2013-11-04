@@ -1,10 +1,11 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE FlexibleInstances #-}
 module SeAn.Lexicon.Typing where
 
 import SeAn.Lexicon.Base
 import SeAn.Lexicon.Parsing (parseType)
+
 import Text.Printf (printf)
-import Debug.Trace (traceShow)
 
 import Data.Monoid
 import Data.Traversable (forM)
@@ -21,52 +22,57 @@ import Control.Monad.Supply (Supply,supply,evalSupply)
 import Control.Monad.Trans (lift)
 import Control.Applicative ((<$>))
 
-type NeedsFreshNames a = Supply Name a
-type WithTypeErrors  a = Either TypeError a
-type WithErrors a      = Either ProgError a
-type W a               = ErrorT ProgError (Supply Name) a
+type NeedsFreshNames a = Supply TyName a
+type WithTypeErrors a = Either TypeError a
+type WithErrors a n = Either (ProgError n) a
+type W a n = ErrorT (ProgError n) (Supply TyName) a
 
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.
-inferTypes :: Prog Name -> WithErrors TyEnv
-inferTypes (Prog ds) =
-  supplyFreshNamesW (foldl infGrp (return emptyEnv) grps)
+inferTypes :: IsName n => Prog n -> WithErrors (Env n) n
+inferTypes (Prog ds) = refreshAllW (supplyFreshNamesW (foldl infGrp (return emptyEnv) grps))
   where
-    grps :: [[Decl Name]]
-    grps = L.groupBy eqNamePrefix ds
-    
--- |Infers the types for a group, possibly failing.
-infGrp :: W TyEnv -> [Decl Name] -> W TyEnv
+    grps = L.groupBy eqName ds
+
+-- |Lifting of `supplyFreshNames` to the inference monad.
+supplyFreshNamesW :: W a n -> WithErrors a n
+supplyFreshNamesW m = evalSupply (runErrorT m) freshNames
+
+-- |Stream of simple names.
+freshNames :: [TyName]
+freshNames = letters ++ numbers
+  where
+  letters    = fmap (: []) (['A'..'D'] ++ ['F'..'S'] ++ ['U'..'Z'])
+  numbers    = fmap (('T' :) . show) [0..]
+
+-- |Lifting of `refreshAll` to the inference monad.
+refreshAllW :: WithErrors (Env n) n -> WithErrors (Env n) n
+refreshAllW env = env >>= return . refreshAll
+
+-- |Infers the types for a group of declarations, possibly failing.
+infGrp :: IsName n => W (Env n) n -> [Decl n] -> W (Env n) n
 infGrp env grp = do
-  env <- env;
+  env <- env
   let infs = map (infDecl env) grp
   let (errs,dcls) = L.partition isError infs
   foldl (<<!) (return env)
     $ if L.null dcls then errs else dcls
-  
+
 -- |Infers the type of a declaration, possibly failing.
-infDecl :: TyEnv -> Decl Name -> W (Name, Type)
+infDecl :: IsName n => Env n -> Decl n -> W (n,Type) n
 infDecl env (Decl n e) = inferType e env >>= return . (n,) . fst
 
 -- |Checks if a value in the W monad is an error.
-isError :: W a -> Bool
+isError :: W a n -> Bool
 isError w = case supplyFreshNamesW w of
   Left  _ -> True
   Right _ -> False
 
--- |Check if the declared functions have equal name prefixes.
-eqNamePrefix :: Decl Name -> Decl Name -> Bool
-eqNamePrefix (Decl m _) (Decl n _) = namePrefix m == namePrefix n
-
--- |Take the prefix of a name.
-namePrefix :: Name -> Name
-namePrefix = takeWhile (/= '+')
-
 -- |Implementation of algorithm W.
-inferType :: Expr Name -> TyEnv -> W (Type , TySubst)
+inferType :: IsName n => Expr n -> Env n -> W (Type,TySubst) n
 inferType exp env = case exp of
 
-  Con n       -> return (typeOf n , Nil)
+  Con n       -> return (typeOf . base $ n , Nil)
 
   Var n       -> case findByName n env of
                   Just t  -> return (t, Nil)
@@ -87,72 +93,56 @@ inferType exp env = case exp of
                     return (t2 , fromList [s2,s1])
 
   Hole t      -> return (t, Nil)
-  
+
   Inst n w    -> case findByName n env of
                   Just t  -> return (t, Nil)
                   Nothing -> throwError (UnboundVariable n)
 
 -- |Lifting of `unify` to the inference monad.
-unifyW :: Expr Name -> Type -> Type -> W TySubst
+unifyW :: Expr n -> Type -> Type -> W TySubst n
 unifyW exp t1 t2 = case unify t1 t2 of
   Left  e -> throwError (TypeErrorIn exp e)
   Right s -> return s
 
--- |Lifting of `supplyFreshNames` to the inference monad.
-supplyFreshNamesW :: W a -> WithErrors a
-supplyFreshNamesW m = evalSupply (runErrorT m) freshNames
-
--- |Lifting of `refreshAll` to the inference monad.
-refreshAllW :: WithErrors TyEnv -> WithErrors TyEnv
-refreshAllW env = env >>= return . refreshAll
-
-
 -- * Type Environments
 
-type TyEnv = Map Name Type
+type Env n = Map n Type
 
 -- |Inserts an entry into a type environment.
-(<<) :: TyEnv -> (Name,Type) -> TyEnv
+(<<) :: IsName n => Env n -> (n,Type) -> Env n
 (<<) env (n,t) = M.insert n t env
 
 -- |Replaces an entry in a type environment (based on name equality).
-(<<!) :: W TyEnv -> W (Name,Type) -> W TyEnv
+(<<!) :: IsName n => W (Env n) n -> W (n,Type) n -> W (Env n) n
 (<<!) env w = do env <- env; (n,t) <- w; return $ env << (n,t)
 
 -- |Applies a function to all types in a type environment.
-mapEnv :: (Type -> Type) -> TyEnv -> TyEnv
+mapEnv :: (Type -> Type) -> Env n -> Env n
 mapEnv = M.map
 
 -- |Finds all entries for a given name in a type environment.
-findByName :: Name -> TyEnv -> Maybe Type
+findByName :: IsName n => n -> Env n -> Maybe Type
 findByName = M.lookup
 
 -- |The empty environment.
-emptyEnv :: TyEnv
+emptyEnv :: (Env n)
 emptyEnv = M.empty
 
 
--- * Fresh Names
+-- * Fresh ns
 
 -- |Generates a fresh type variables.
 fresh :: NeedsFreshNames Type
 fresh = do x <- supply; return (TyVar x)
 
 -- |Lifting of `fresh` to the inference monad.
-freshW :: W Type
+freshW :: W Type n
 freshW = lift fresh
 
 -- |Provides an infinite stream of names to things in the @W@ monad,
 --  reducing it to just an @Either@ value containing perhaps a TypeError.
 supplyFreshNames :: NeedsFreshNames a -> a
 supplyFreshNames m = evalSupply m freshNames
-
--- |Simply stream of fresh names.
-freshNames :: [Name]
-freshNames = letters ++ numbers
-  where
-  letters    = fmap (: []) (['A'..'D'] ++ ['F'..'S'] ++ ['U'..'Z'])
-  numbers    = fmap (('T' :) . show) [0..]
 
 -- |Replaces every type variable with a fresh one.
 refresh :: Type -> Type
@@ -167,7 +157,7 @@ refresh = supplyFreshNames . lazyRefresh
                      return (apply (fromList subs) t)
 
 -- |Refreshes all entries in a type environment.
-refreshAll :: TyEnv -> TyEnv
+refreshAll :: Env n -> Env n
 refreshAll = mapEnv refresh
 
 
@@ -175,7 +165,7 @@ refreshAll = mapEnv refresh
 -- * Type Substitutions
 
 data TySubst
-  = Nil | Snoc Name Type TySubst
+  = Nil | Snoc TyName Type TySubst
   deriving (Eq,Show)
 
 -- |Performs a single substitution.
@@ -190,11 +180,11 @@ apply Nil t = t
 apply (Snoc x t' s) t = (for t' x) (apply s t)
 
 -- |Applies a substitution to a type environment.
-applyEnv :: TySubst -> TyEnv -> TyEnv
+applyEnv :: TySubst -> Env n -> Env n
 applyEnv s env = mapEnv (apply s) env
 
 -- |An alias for the creation of substitutions.
-(~>) :: Name -> Type -> TySubst
+(~>) :: TyName -> Type -> TySubst
 (~>) x t' = Snoc x t' Nil
 
 -- |An alias for substitution concatination.
@@ -229,11 +219,11 @@ unify (TyVar x) ty
 unify t1 t2         = throwError (CannotUnify t1 t2)
 
 -- |Occurs check for Robinson's unification algorithm.
-occurs :: Name -> Type -> Bool
+occurs :: TyName -> Type -> Bool
 occurs n t = n `elem` (ftv t)
 
 -- |Returns the set of free type variables in a type.
-ftv :: Type -> [Name]
+ftv :: Type -> [TyName]
 ftv (TyCon   _) = [ ]
 ftv (TyVar   n) = [n]
 ftv (TyArr a b) = L.union (ftv a) (ftv b)
@@ -244,8 +234,8 @@ ftv (TyArr a b) = L.union (ftv a) (ftv b)
 
 -- |Representation for possible errors in unification.
 data TypeError
-  = OccursCheck   Name Type -- ^ thrown when occurs check in unify fails
-  | CannotUnify   Type Type -- ^ thrown when types cannot be unified
+  = OccursCheck TyName Type -- ^ thrown when occurs check in unify fails
+  | CannotUnify Type Type   -- ^ thrown when types cannot be unified
   | MiscTypeError String    -- ^ stores miscellaneous errors
   deriving Eq
 
@@ -253,7 +243,7 @@ instance Error TypeError where
   strMsg msg = MiscTypeError msg
 
 instance Show TypeError where
-  show (OccursCheck n  t1) = printf "Occurs check fails; '%s' occurs in '%s'" n (show t1)
+  show (OccursCheck n t1)  = printf "Occurs check fails; '%s' occurs in '%s'" n (show t1)
   show (CannotUnify t1 t2) = printf "Cannot unify '%s' with '%s'" (show t1) (show t2)
   show (MiscTypeError msg) = msg
 
@@ -262,18 +252,19 @@ instance Show TypeError where
 -- * Errors in Type Inference
 
 -- |Representation for possible errors in algorithm W.
-data ProgError
-  = UnknownConstant Name                  -- ^ thrown when unknown constant is encountered
-  | UnboundVariable Name                  -- ^ thrown when unbound variable is encountered
-  | TypeErrorIn     (Expr Name) TypeError -- ^ thrown when types of expressions cannot be unified
-  | MiscProgError   String                -- ^ stores miscellaneous errors
+data ProgError n
+  = UnknownConstant n              -- ^ thrown when unknown constant is encountered
+  | UnboundVariable n              -- ^ thrown when unbound variable is encountered
+  | TypeErrorIn (Expr n) TypeError -- ^ thrown when types of expressions cannot be unified
+  | MiscProgError String           -- ^ stores miscellaneous errors
   deriving Eq
 
-instance Error ProgError where
+instance Error (ProgError n) where
   strMsg msg = MiscProgError msg
 
-instance Show ProgError where
-  show (UnknownConstant n)     = printf "Unknown constant '%s'" n
-  show (UnboundVariable n)     = printf "Unbound variable '%s'" n
-  show (TypeErrorIn exp err) = printf "Type error in %s; %s" (show exp) (show err)
-  show (MiscProgError msg)     = msg
+instance IsName n => Show (ProgError n) where
+  show (UnknownConstant n)   = printf "Unknown constant '%s'" (collapse n)
+  show (UnboundVariable n)   = printf "Unbound variable '%s'" (collapse n)
+  show (TypeErrorIn exp err) = printf "Type error in %s; %s"
+                                 (show . mapNames collapse $ exp) (show err)
+  show (MiscProgError msg)   = msg
