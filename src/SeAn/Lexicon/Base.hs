@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 module SeAn.Lexicon.Base where
 
@@ -27,7 +29,7 @@ data Expr n
 
   -- holes and instantiation
    | Hole Type
-   | Inst n Name
+   | Inst (Expr n) Name
    deriving (Eq)
 
 data Type
@@ -87,7 +89,7 @@ instance IsName n => Show (Expr n) where
       show1 (App   e1 e2) = printf "%s %s" (wrap1 e1) (wrap1 e2)
       show1 (Let n e1 e2) = printf "let %s = %s in %s" n (show1 e1) (show1 e2)
       show1 (Hole t)      = printf "_:%s" (show (ShortType t))
-      show1 (Inst n w)    = printf "%s @ %s" n w
+      show1 (Inst e w)    = printf "%s @ %s" (wrap1 e) w
 
       wrap1 :: Expr Name -> String
       wrap1 e1@(App _ _) = printf "(%s)" (show1 e1)
@@ -192,7 +194,7 @@ instance HasNames Expr where
   mapNames f (App e1 e2)   = App (mapNames f e1) (mapNames f e2)
   mapNames f (Let n e1 e2) = Let (f n) (mapNames f e1) (mapNames f e2)
   mapNames f (Hole t)      = Hole t
-  mapNames f (Inst n w)    = Inst (f n) w
+  mapNames f (Inst e w)    = Inst (mapNames f e) w
 
 
 -- |Get all declared names from a program.
@@ -204,26 +206,36 @@ declaredNames (Prog ds) = map (\(Decl n _) -> n) ds
 
 type Label = [Int]
 
-class Ord n => IsName n where
-  base :: n -> Name
-  collapse :: n -> Name
-  settype :: n -> Type -> n
+type family   NoType n :: *
+type instance NoType Name = Name
+type instance NoType (n,Label) = (NoType n,Label)
+type instance NoType (n,Type) = NoType n
+
+class (Ord n, Ord (NoType n)) => IsName n where
+  base      :: n -> Name
+  collapse  :: n -> Name
+  typedName :: Type -> Name -> n
+  noType    :: n -> NoType n
 
 instance IsName Name where
-  base = id
-  collapse = id
-  settype = const
+  base      = id
+  collapse  = id
+  typedName = flip const
+  noType    = id
 
 instance IsName n => IsName (n,Label) where
-  base = base . fst
+  base            = base . fst
   collapse (n,[]) = collapse n
   collapse (n,ls) = collapse n ++ "#" ++ concatMap show ls
-  settype (n,ls) t = (settype n t,ls)
+  typedName ty n  = (typedName ty n,[])
+  noType   (n,ls) = (noType n,ls)
 
 instance IsName n => IsName (n,Type) where
-  base = base . fst
-  collapse (n,ty) = collapse n ++ ":" ++ show (ShortType ty)
-  settype (n,_) ty = (settype n ty,ty)
+  base             = base . fst
+  collapse (n,ty)  = collapse n ++ ":" ++ show (ShortType ty)
+  typedName ty n   = (typedName ty n,ty)
+  noType   (n,ty)  = noType n
+
 
 -- * Comparing declarations
 

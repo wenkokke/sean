@@ -1,6 +1,9 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE FlexibleInstances #-}
-module SeAn.Lexicon.Typing where
+module SeAn.Lexicon.Typing
+       (inferTypes,unify
+       ,WithErrors,ProgError (..)
+       ,WithTypeErrors,TypeError (..)) where
 
 import SeAn.Lexicon.Base
 import Text.Printf (printf)
@@ -25,13 +28,15 @@ type W a n = ErrorT (ProgError n) (Supply TyName) a
 
 -- |Runs algorithm W on a list of declarations, making each previous
 --  declaration an available expression in the next.
-inferTypes :: IsName n => Prog n -> WithErrors (Env n, [Decl (n,Type)]) n
-inferTypes (Prog ds) =
-  refreshAllW (supplyFreshNamesW (foldl inferGroupTypes initial groups))
+inferTypes :: IsName n => Prog n -> WithErrors (Prog (n,Type)) n
+inferTypes (Prog ds) = do
+  (_,ds) <- supplyFreshNamesW (foldl inferGroupTypes initial groups)
+  return $ Prog (map (mapNames (id *** refresh)) ds)
   where
     groups = L.groupBy eqName ds
     initial :: W (Env n, [Decl (n,Type)]) n
     initial = return (emptyEnv, [])
+
 
 -- |Infers the types for a group of declarations, possibly failing.
 inferGroupTypes :: IsName n
@@ -74,27 +79,29 @@ inferExprType exp env = case exp of
                   Just ty -> return (Var (n,ty), ty, Nil)
                   Nothing -> throwError (UnboundVariable n)
 
-  Abs x e     -> do a <- freshW;
-                    (e', t1, s1) <- inferExprType e $ env << (x , a)
-                    let a' = apply s1 a
-                    return (Abs (x,a') e', TyArr a' t1 , s1)
+  Abs x e     -> do a1 <- freshW;
+                    (e1, t1, s1) <- inferExprType e $ env << (x,a1)
+                    let a2 = apply s1 a1
+                    let e2 = apply s1 e1
+                    return (Abs (x,a2) e2, TyArr a2 t1 , s1)
 
-  App f x     -> do (f', t1 , s1) <- inferExprType f $ env
-                    (x', t2 , s2) <- inferExprType x $ applyEnv s1 env
-                    a  <- freshW
-                    s3 <- unifyW exp (apply s2 t1) (TyArr t2 a)
-                    let a' = apply s3 a
-                    return (App f' x', a', fromList [s3,s2,s1])
+  App f x     -> do (f1, t1 , s1) <- inferExprType f $ env
+                    (x1, t2 , s2) <- inferExprType x $ apply s1 env
+                    a1 <- freshW
+                    s3 <- unifyW exp (apply s2 t1) (TyArr t2 a1)
+                    let a2 = apply s3 a1
+                    let f2 = apply s3 f1
+                    let x2 = apply s3 x1
+                    return (App f2 x2, a2, fromList [s3,s2,s1])
 
   Let x e1 e2 -> do (e1', t1 , s1) <- inferExprType e1 $ env
-                    (e2', t2 , s2) <- inferExprType e2 $ applyEnv s1 env << (x , t1)
+                    (e2', t2 , s2) <- inferExprType e2 $ apply s1 env << (x , t1)
                     return (Let (x,t1) e1' e2', t2, fromList [s2,s1])
 
   Hole t      -> return (Hole t, t, Nil)
 
-  Inst n w    -> case findByName n env of
-                  Just ty -> return (Inst (n,ty) w, ty, Nil)
-                  Nothing -> throwError (UnboundVariable n)
+  Inst e w    -> do (e', t1, s1) <- inferExprType e $ env
+                    return (Inst e' w, t1, Nil)
 
 -- |Lifting of `unify` to the inference monad.
 unifyW :: Expr n -> Type -> Type -> W TySubst n
@@ -169,33 +176,30 @@ refresh = supplyFreshNames . lazyRefresh
 refreshAll :: Env n -> Env n
 refreshAll = mapEnv refresh
 
--- |Lifting of `refreshAll` to the inference monad.
-refreshAllW :: WithErrors (Env n,[Decl (n,Type)]) n -> WithErrors (Env n,[Decl (n,Type)]) n
-refreshAllW r = do (env,ds) <- r
-                   return (refreshAll env, map (mapNames (id *** refresh)) ds)
-
-
-
 -- * Type Substitutions
 
 data TySubst
   = Nil | Snoc TyName Type TySubst
   deriving (Eq,Show)
 
+class Subst a where
+  apply :: TySubst -> a -> a
+
+instance Subst Type where
+  apply Nil t = t
+  apply (Snoc x t' s) t = (for t' x) (apply s t)
+
+instance Subst (Env n) where
+  apply s = mapEnv (apply s)
+
+instance Subst (Expr (n,Type)) where
+  apply s = mapNames (\(n,ty) -> (n,apply s ty))
+
 -- |Performs a single substitution.
 for :: Type -> Name -> Type -> Type
 for t' x c@(TyCon _) = c
 for t' x v@(TyVar y) = if x == y then t' else v
 for t' x (TyArr a b) = TyArr (for t' x a) (for t' x b)
-
--- |Applies a substitution to a type.
-apply :: TySubst -> Type -> Type
-apply Nil t = t
-apply (Snoc x t' s) t = (for t' x) (apply s t)
-
--- |Applies a substitution to a type environment.
-applyEnv :: TySubst -> Env n -> Env n
-applyEnv s env = mapEnv (apply s) env
 
 -- |An alias for the creation of substitutions.
 (~>) :: TyName -> Type -> TySubst

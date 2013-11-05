@@ -1,81 +1,117 @@
-module SeAn.Lexicon.Reducing (reduceExpr,toDeBruijn,toEnv,global) where
+module SeAn.Lexicon.Reducing (reduce) where
 
-import SeAn.Lexicon.Base hiding (Expr (..))
-import qualified SeAn.Lexicon.Base as S
+import SeAn.Lexicon.Base
+import SeAn.Lexicon.Typing
 
+import Text.Printf (printf)
+
+import Control.Arrow ((***))
+import Control.Exception
+import Control.Monad.Error
+
+import Data.List (elemIndex,partition)
 import Data.Map (Map)
 import qualified Data.Map as M
-import Data.List (elemIndex)
-import qualified Data.List as L
+import Data.Maybe (fromMaybe)
 
-data Expr n
-   = Con n
-   | Var Int
-   | Abs n (Expr n)
-   | App   (Expr n) (Expr n)
-   deriving (Eq,Show)
-
-data Env n = Env
-  { global :: n -> Maybe (S.Expr n)
-  , local  :: [n]
-  , inst   :: Maybe n
-  }
-
-reduceExpr :: IsName n => Prog n -> S.Expr n -> S.Expr n
-reduceExpr p e = fromDeBruijn [] deBruijn
+isAnnotation :: Decl n -> Bool
+isAnnotation (Decl _ e) = go e
   where
-    env = toEnv p
-    deBruijn = toDeBruijn env e
+    go :: Expr n -> Bool
+    go e = case e of
+      Con n       -> False
+      Var n       -> False
+      Abs n e     -> go e
+      App   e1 e2 -> go e1 || go e2
+      Let n e1 e2 -> go e1 || go e2
+      Hole t      -> True
+      Inst e a    -> False
 
--- |Builds an environment from a program.
-toEnv :: IsName n => Prog n -> Env n
-toEnv (Prog ds) = Env
-  { global = let m = M.fromList (map (\(Decl n e) -> (n,e)) ds)
-             in \n -> M.lookup n m
-  , local  = []
-  , inst   = Nothing
-  }
+-- * Reduction functions
 
--- |Convert an expression to a de Bruijn style lambda expression
---  and perform several rewrites in the meantime:
---
---    1. expand constant expressions using the environment
---    2. rewrites *let* expressions:
---       @let x = e1 in e2@ rewrites to @(\x.e2) e1@
---    3. rewrites holes and instantiation expressions
-toDeBruijn :: IsName n => Env n -> S.Expr n -> Expr n
-toDeBruijn env exp = case exp of
-  S.Con n       -> if isReservedName (base n)
-                    then Con n
-                    else case global env n of
-                     Just e  -> toDeBruijn env e
-                     Nothing -> error ("reduce: unknown function " ++ collapse n)
-  S.Var n       -> case n `elemIndex` local env of
-                    Just ix -> Var ix
-                    Nothing -> error ("reduce: unbound variable " ++ collapse n)
-  S.Abs n e     -> Abs n (toDeBruijn (n `addlocal` env) e)
-  S.App   e1 e2 -> App (toDeBruijn env e1) (toDeBruijn env e2)
-  S.Let n e1 e2 -> App (Abs n (toDeBruijn (n `addlocal` env) e2)) (toDeBruijn env e1)
-  S.Hole t      -> case inst env of
-                    Just n  -> Con (settype n t)
-                    Nothing -> error ("reduce: uninstantiated hole")
-  S.Inst n a    -> case global env n of
-                    Just e  -> toDeBruijn (n `addinst` env) e
-                    Nothing -> error ("reduce: unknown function " ++ collapse n)
+tuple :: Decl n -> (n,Expr n)
+tuple (Decl n e) = (n,e)
 
--- |Adds a variable name to the list of bound variables.
-addlocal :: n -> Env n -> Env n
-addlocal n env = env { local = n : local env }
+reduce :: IsName n => Prog n -> Either (ReductionError n) (Prog n)
+reduce p@(Prog ds) = do
+  env <- foldM reduceDecl (toEnv as) (reverse es)
+  return $ Prog (M.elems env)
+  where
+    (as,es) = partition isAnnotation ds
 
--- |Adds an instantiation name as the filling expression.
-addinst :: n -> Env n -> Env n
-addinst n env = env { inst = Just n }
+toEnv :: IsName n => [Decl n] -> Env n
+toEnv = M.fromList . map (\d@(Decl n _) -> (noType n,d))
 
--- |Convert a de Bruijn style lambda expression back to a regular
---  lambda expression.
-fromDeBruijn :: IsName n => [n] -> Expr n -> S.Expr n
-fromDeBruijn ns exp = case exp of
-  Con n     -> S.Con n
-  Var i     -> S.Var (ns !! i)
-  Abs n e   -> S.Abs n (fromDeBruijn (n:ns) e)
-  App e1 e2 -> S.App (fromDeBruijn ns e1) (fromDeBruijn ns e2)
+reduceDecl :: IsName n => Env n -> Decl n -> Either (ReductionError n) (Env n)
+reduceDecl env (Decl n e0) = do
+  e1 <- reduceExpr env e0
+  return $ M.insert (noType n) (Decl n e1) env
+
+reduceExpr :: IsName n => Env n -> Expr n -> Either (ReductionError n) (Expr n)
+reduceExpr env e = expand (env, Nothing) e `catchError` addInfo e
+
+type Env n = Map (NoType n) (Decl n)
+
+findByName :: IsName n => Env n -> n -> Either (ReductionError n) (Expr n)
+findByName ds n = maybe ifNothing ifJust maybeExpr
+  where
+    ifJust    = return
+    ifNothing = throwError (UnknownName n (Con n))
+    maybeExpr = do (Decl _ e) <- M.lookup (noType n) ds; return e
+
+-- |Expands lambda terms by recursive lookup in an environment.
+expand :: IsName n => (Env n, Maybe Name) -> Expr n -> Either (ReductionError n) (Expr n)
+expand env@(ds,m) exp = case exp of
+
+  c@(Con n)   -> if isReservedName (base n)
+                 then do return c
+                 else do e1 <- findByName ds n
+                         expand env e1
+
+  v@(Var _)   -> do return v
+
+  Abs x e1    -> do e1 <- expand env e1
+                    return $ Abs x e1
+
+  App   e1 e2 -> do e1 <- expand env e1
+                    e2 <- expand env e2
+                    return $ App e1 e2
+
+  Let x e1 e2 -> do e1 <- expand env e1
+                    e2 <- expand env e2
+                    return $ Let x e1 e2
+
+  h@(Hole t)  -> fromMaybe (throwError $ UnfilledHole h)
+                   $ fmap (return . Con . typedName t) m
+
+  Inst e1 n   -> do expand (ds, Just n) e1
+
+
+
+-- * Reduction errors
+
+data ReductionError n
+  = UnfilledHole  (Expr n)
+  | UnknownName n (Expr n)
+  | RemainingHole (Expr n)
+  | RemainingInst (Expr n)
+  | MiscError String
+
+instance IsName n => Show (ReductionError n) where
+  show (UnfilledHole e)
+    = printf "Unfilled hole in %s" (show (mapNames collapse e))
+  show (UnknownName n e)
+    = printf "Unknown name %s in %s" (collapse n) (show $ mapNames collapse e)
+  show (RemainingHole e)
+    = printf "Remaining holes in %s" (show $ mapNames collapse e)
+  show (RemainingInst e)
+    = printf "Remaining instantiation in %s" (show $ mapNames collapse e)
+  show (MiscError str)
+    = str
+
+instance Error (ReductionError n) where
+  strMsg = MiscError
+
+addInfo :: Expr n -> ReductionError n -> Either (ReductionError n) a
+addInfo e (RemainingHole _) = throwError $ RemainingHole e
+addInfo _  err              = throwError $ err

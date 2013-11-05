@@ -1,7 +1,7 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE FlexibleContexts #-}
-module SeAn.Lexicon.Parsing where
-
+module SeAn.Lexicon.Parsing
+       (parse,pName,pType,pShortType,pExpr,pDecl,pDecls,pProg) where
 import Prelude hiding (abs,not)
 
 import SeAn.Lexicon.Base
@@ -19,20 +19,8 @@ import Text.ParserCombinators.UU.Idioms (iI,Ii (..))
 import Text.ParserCombinators.UU.Utils (runParser,pSpaces,lexeme
   ,pSymbol,pParens,pLetter,pDigit,pAnySym)
 
-parseProg :: String -> Prog Name
-parseProg = runParser "stdin" pProg
-
-parseDecl :: String -> Decl Name
-parseDecl = runParser "stdin" pDecl
-
-parseExpr :: String -> Expr Name
-parseExpr = runParser "stdin" pExpr
-
-parseType :: String -> Type
-parseType = runParser "stdin" pType
-
-parseShortType :: String -> Type
-parseShortType = runParser "stdin" pShortType
+parse :: String -> Prog Name
+parse = runParser "stdin" pProg
 
 -- |Decide whether something is a bound or a free variable, and change
 --  the constructor accordingly. Separated to avoid monadic parsers.
@@ -65,8 +53,10 @@ pExpr = pLet <|> pGAbs <|> pBin
   where
   -- parse simple terms
   pHole = iI Hole '_' ':' pShortType Ii                 <?> "hole"
+  pCon :: Parser (Expr Name)
+  pCon  = iI Con pName Ii                               <?> "constant"
   pVar  = iI Var pName Ii                               <?> "variable"
-  pInst = iI Inst pName '@' pName Ii                    <?> "hole instantiation"
+  pInst = iI Inst pCon '@' pName Ii                     <?> "hole instantiation"
   pPos  = pHole <|> pInst <|> pVar <|> pParens pExpr
   pNeg  = iI not '~' pPos Ii                            <?> "negation"
   pAtom = pPos <|> pNeg                                 <?> "atomic expression"

@@ -4,7 +4,7 @@
   are separated by the `+` token. This is a hint to the type inference that
   at least one of these definitions should succeed.
   |-}
-module SeAn.Lexicon.Resolving where
+module SeAn.Lexicon.Resolving (resolve) where
 
 import SeAn.Lexicon.Base hiding (not)
 
@@ -32,12 +32,12 @@ labelZero :: HasNames p => p a -> p (a,Label)
 labelZero = mapNames (\n -> (n,[]))
 
 -- |Disambiguate a program until a fixed-point is reached.
-resolveProg :: IsName n => Prog n -> Prog (n,Label)
-resolveProg = until (not . isAmbiguous) resolveProg1 . labelZero
+resolve :: IsName n => Prog n -> Prog (n,Label)
+resolve = until (not . isAmbiguous) resolve1 . labelZero
 
 -- |Disambiguate a program a single step, not resolving arising ambiguities.
-resolveProg1 :: IsName n => Prog (n,Label) -> Prog (n,Label)
-resolveProg1 p@(Prog decs) = Prog decs'
+resolve1 :: IsName n => Prog (n,Label) -> Prog (n,Label)
+resolve1 p@(Prog decs) = Prog decs'
   where
     names = declaredNames p
     freqs = freq names
@@ -66,8 +66,8 @@ resolveExpr r (Let n e1 e2)  = do let r' = bindName n r
                                   e2' <- resolveExpr r' e2
                                   return (Let n e1' e2')
 resolveExpr r (Hole t)       = do return (Hole t)
-resolveExpr r (Inst n w)     = do n' <- r n
-                                  return (Inst n' w)
+resolveExpr r (Inst e w)     = do e' <- resolveExpr r e
+                                  return (Inst e' w)
 
 -- |Disambiguates names based on a program.
 resolveName :: IsName n => Frequency (n,Label) -> Resolver n
