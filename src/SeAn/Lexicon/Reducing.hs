@@ -8,8 +8,9 @@ import Text.Printf (printf)
 import Control.Arrow ((***))
 import Control.Exception
 import Control.Monad.Error
+import Control.Monad.Supply
 
-import Data.List (elemIndex,partition)
+import Data.List (elemIndex,partition,(\\))
 import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
@@ -29,64 +30,128 @@ isAnnotation (Decl _ e) = go e
 
 -- * Reduction functions
 
-tuple :: Decl n -> (n,Expr n)
-tuple (Decl n e) = (n,e)
-
 reduce :: IsName n => Prog n -> Either (ReductionError n) (Prog n)
 reduce p@(Prog ds) = do
-  env <- foldM reduceDecl (toEnv as) (reverse es)
+  env <- foldM reduceDecl (toEnv as) es
   return $ Prog (M.elems env)
   where
     (as,es) = partition isAnnotation ds
 
-toEnv :: IsName n => [Decl n] -> Env n
-toEnv = M.fromList . map (\d@(Decl n _) -> (noType n,d))
-
 reduceDecl :: IsName n => Env n -> Decl n -> Either (ReductionError n) (Env n)
-reduceDecl env (Decl n e0) = do
-  e1 <- reduceExpr env e0
-  return $ M.insert (noType n) (Decl n e1) env
+reduceDecl env (Decl n e1) = do
+  e2 <- reduceExpr env e1
+  return $ M.insert (noType n) (Decl n e2) env
 
 reduceExpr :: IsName n => Env n -> Expr n -> Either (ReductionError n) (Expr n)
-reduceExpr env e = expand (env, Nothing) e `catchError` addInfo e
+reduceExpr env e
+  = fmap (\e -> evalSupply e freshNames)
+  $ fmap betaReduce
+  $ fmap rewriteLet
+  $ expandFill (env, Nothing) e `catchError` addInfo e
+
+freshNames :: [Name]
+freshNames = map (printf "?%d") ([0..] :: [Int])
+
+
+-- * Substitution and beta conversion
+
+betaReduce :: IsName n => Expr n -> Supply Name (Expr n)
+betaReduce exp = case exp of
+  v@(Var _)             -> return v
+  c@(Con _)             -> return c
+  a@(App (Abs n e1) e2) -> do a <- sub n e2 e1
+                              betaReduce a
+  a@(Abs n e1)          -> do e1 <- betaReduce e1
+                              return $ Abs n e1
+  a@(App e1 e2)         -> do e1 <- betaReduce e1
+                              let a = App e1 e2
+                              case e1 of
+                                Abs _ _ -> betaReduce a
+                                _       -> return a
+
+
+
+sub :: IsName n => n -> Expr n -> Expr n -> Supply Name (Expr n)
+sub x r v@(Var y)     = do return $ if x == y then r else v
+sub x r c@(Con _)     = do return $ c
+sub x r a@(Abs y e1)  = if x == y
+                        then return a
+                        else if y `elem` fv r
+                             then do n <- supply
+                                     let z = rename n y
+                                     e1 <- sub y (Var z) e1
+                                     e1 <- sub x r e1
+                                     return $ Abs z e1
+                             else do e1 <- sub x r e1
+                                     return $ Abs y e1
+sub x r a@(App e1 e2) = do e1 <- sub x r e1
+                           e2 <- sub x r e2
+                           return $ App e1 e2
+
+-- |Compute the free variables in an expression.
+fv :: Eq n => Expr n -> [n]
+fv (Con _)       = [ ]
+fv (Var n)       = [n]
+fv (Abs n e1)    = fv e1 \\ [n]
+fv (App   e1 e2) = fv e1 ++ fv e2
+
+
+
+-- * Removal of let-bindings trough rewrites
+
+-- |Removes let-bindings by rewriting them to lambda terms.
+rewriteLet :: Expr n -> Expr n
+rewriteLet exp = case exp of
+  c@(Con _)   -> c
+  v@(Var _)   -> v
+  Abs n e1    -> Abs n (rewriteLet e1)
+  App   e1 e2 -> App (rewriteLet e1) (rewriteLet e2)
+  Let n e1 e2 -> App (Abs n e2) e1
+
+
+
+-- * Expansion through lookups
 
 type Env n = Map (NoType n) (Decl n)
 
+toEnv :: IsName n => [Decl n] -> Env n
+toEnv = M.fromList . map (\d@(Decl n _) -> (noType n,d))
+
+-- |Expand lambda terms by recursive lookup in an environment, and fill its holes.
+expandFill :: IsName n => (Env n, Maybe Name) -> Expr n -> Either (ReductionError n) (Expr n)
+expandFill env@(ds,m) exp = case exp of
+
+  c@(Con n)   -> if isReservedName (base n)
+                 then do return c
+                 else do e1 <- findByName ds n
+                         expandFill env e1
+
+  v@(Var _)   -> do return v
+
+  Abs x e1    -> do e1 <- expandFill env e1
+                    return $ Abs x e1
+
+  App   e1 e2 -> do e1 <- expandFill env e1
+                    e2 <- expandFill env e2
+                    return $ App e1 e2
+
+  Let x e1 e2 -> do e1 <- expandFill env e1
+                    e2 <- expandFill env e2
+                    return $ Let x e1 e2
+
+  h@(Hole t)  -> fromMaybe (throwError $ UnfilledHole h)
+                   $ fmap (return . Con . retype t) m
+
+  Inst e1 n   -> do expandFill (ds, Just n) e1
+
+
+-- |Lookup an expression in an environment, possibly fail.
 findByName :: IsName n => Env n -> n -> Either (ReductionError n) (Expr n)
 findByName ds n = maybe ifNothing ifJust maybeExpr
   where
     ifJust    = return
     ifNothing = throwError (UnknownName n (Con n))
     maybeExpr = do (Decl _ e) <- M.lookup (noType n) ds; return e
-
--- |Expands lambda terms by recursive lookup in an environment.
-expand :: IsName n => (Env n, Maybe Name) -> Expr n -> Either (ReductionError n) (Expr n)
-expand env@(ds,m) exp = case exp of
-
-  c@(Con n)   -> if isReservedName (base n)
-                 then do return c
-                 else do e1 <- findByName ds n
-                         expand env e1
-
-  v@(Var _)   -> do return v
-
-  Abs x e1    -> do e1 <- expand env e1
-                    return $ Abs x e1
-
-  App   e1 e2 -> do e1 <- expand env e1
-                    e2 <- expand env e2
-                    return $ App e1 e2
-
-  Let x e1 e2 -> do e1 <- expand env e1
-                    e2 <- expand env e2
-                    return $ Let x e1 e2
-
-  h@(Hole t)  -> fromMaybe (throwError $ UnfilledHole h)
-                   $ fmap (return . Con . typedName t) m
-
-  Inst e1 n   -> do expand (ds, Just n) e1
-
-
 
 -- * Reduction errors
 

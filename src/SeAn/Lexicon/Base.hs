@@ -212,29 +212,34 @@ type instance NoType (n,Label) = (NoType n,Label)
 type instance NoType (n,Type) = NoType n
 
 class (Ord n, Ord (NoType n)) => IsName n where
-  base      :: n -> Name
-  collapse  :: n -> Name
-  typedName :: Type -> Name -> n
-  noType    :: n -> NoType n
+  base     :: n -> Name
+  collapse :: n -> Name
+  rename   :: Name -> n -> n
+  retype   :: Type -> Name -> n
+  noType   :: n -> NoType n
 
 instance IsName Name where
-  base      = id
-  collapse  = id
-  typedName = flip const
-  noType    = id
+  base     = id
+  collapse = id
+  rename   = const
+  retype   = flip const
+  noType   = id
 
 instance IsName n => IsName (n,Label) where
-  base            = base . fst
-  collapse (n,[]) = collapse n
-  collapse (n,ls) = collapse n ++ "#" ++ concatMap show ls
-  typedName ty n  = (typedName ty n,[])
-  noType   (n,ls) = (noType n,ls)
+  base              = base . fst
+  collapse   (n,[]) = collapse n
+  collapse   (n,ls) = collapse n ++ "#" ++ concatMap show ls
+  rename   m (n,ls) = (rename m n,ls)
+  retype      ty n  = (retype ty n,[])
+  noType     (n,ls) = (noType n,ls)
+
 
 instance IsName n => IsName (n,Type) where
-  base             = base . fst
-  collapse (n,ty)  = collapse n ++ ":" ++ show (ShortType ty)
-  typedName ty n   = (typedName ty n,ty)
-  noType   (n,ty)  = noType n
+  base              = base . fst
+  collapse   (n,ty) = collapse n ++ ":" ++ show (ShortType ty)
+  rename   m (n,ty) = (rename m n, ty)
+  retype      ty n  = (retype ty n, ty)
+  noType     (n,ty) = noType n
 
 
 -- * Comparing declarations

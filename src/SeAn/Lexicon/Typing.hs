@@ -31,7 +31,7 @@ type W a n = ErrorT (ProgError n) (Supply TyName) a
 inferTypes :: IsName n => Prog n -> WithErrors (Prog (n,Type)) n
 inferTypes (Prog ds) = do
   (_,ds) <- supplyFreshNamesW (foldl inferGroupTypes initial groups)
-  return $ Prog (map (mapNames (id *** refresh)) ds)
+  return $ Prog (reverse . map (mapNames (id *** refresh)) $ ds)
   where
     groups = L.groupBy eqName ds
     initial :: W (Env n, [Decl (n,Type)]) n
