@@ -15,6 +15,8 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (fromMaybe)
 
+
+-- |Check if a declaration has unfilled holes.
 isAnnotation :: Decl n -> Bool
 isAnnotation (Decl _ e) = go e
   where
@@ -57,18 +59,17 @@ freshNames = map (printf "?%d") ([0..] :: [Int])
 
 betaReduce :: IsName n => Expr n -> Supply Name (Expr n)
 betaReduce exp = case exp of
-  v@(Var _)             -> return v
-  c@(Con _)             -> return c
+  v@(Var _)             -> do return v
+  c@(Con _)             -> do return c
   a@(App (Abs n e1) e2) -> do a <- sub n e2 e1
                               betaReduce a
   a@(Abs n e1)          -> do e1 <- betaReduce e1
-                              return $ Abs n e1
+                              return (Abs n e1)
   a@(App e1 e2)         -> do e1 <- betaReduce e1
                               let a = App e1 e2
                               case e1 of
                                 Abs _ _ -> betaReduce a
                                 _       -> return a
-
 
 
 sub :: IsName n => n -> Expr n -> Expr n -> Supply Name (Expr n)
@@ -112,37 +113,52 @@ rewriteLet exp = case exp of
 
 -- * Expansion through lookups
 
-type Env n = Map (NoType n) (Decl n)
+type Env n = [((n,Type), Decl (n,Type))]
 
-toEnv :: IsName n => [Decl n] -> Env n
-toEnv = M.fromList . map (\d@(Decl n _) -> (noType n,d))
+toEnv :: IsName n => [Decl (n,Type)] -> Env n
+toEnv = map (\d@(Decl n _) -> (n,d))
+
+findInEnv :: IsName n => (n,Type) -> Env n -> Maybe (Decl (n,Type))
+findInEnv (n,ty) = undefined
+  where
+    unifyTypes :: ((n,Type),Decl (n,Type)) -> Supply Name (Maybe (Decl (n,Type)))
+    unifyTypes ((_,t1),d@(Decl (_,t2) _)) = case unify t1 t2 of
+      Left  _ -> return Nothing
+      Right s -> undefined
+    filterByName :: Env n -> Env n
+    filterByName = filter ((==n) . fst . fst)
 
 -- |Expand lambda terms by recursive lookup in an environment, and fill its holes.
 expandFill :: IsName n => (Env n, Maybe Name) -> Expr n -> Either (ReductionError n) (Expr n)
 expandFill env@(ds,m) exp = case exp of
 
-  c@(Con n)   -> if isReservedName (base n)
-                 then do return c
-                 else do e1 <- findByName ds n
-                         expandFill env e1
+  c@(Con n)       -> if isReservedName (base n)
+                     then do return c
+                     else do e1 <- findByName ds n
+                             expandFill env e1
 
-  v@(Var _)   -> do return v
+  v@(Var _)       -> do return v
 
-  Abs x e1    -> do e1 <- expandFill env e1
-                    return $ Abs x e1
+  a@(Abs x e1)    -> do e1 <- expandFill env e1
+                        return $ Abs x e1
 
-  App   e1 e2 -> do e1 <- expandFill env e1
-                    e2 <- expandFill env e2
-                    return $ App e1 e2
+  a@(App e1 e2)   -> do e1 <- expandFill env e1
+                        e2 <- expandFill env e2
+                        return $ App e1 e2
 
-  Let x e1 e2 -> do e1 <- expandFill env e1
-                    e2 <- expandFill env e2
-                    return $ Let x e1 e2
+  l@(Let x e1 e2) -> do e1 <- expandFill env e1
+                        e2 <- expandFill env e2
+                        return $ Let x e1 e2
 
-  h@(Hole t)  -> fromMaybe (throwError $ UnfilledHole h)
-                   $ fmap (return . Con . retype t) m
+  h@(Hole t)      -> fromMaybe (throwError $ UnfilledHole h)
+                     $ fmap (return . Con . retype t) m
 
-  Inst e1 n   -> do expandFill (ds, Just n) e1
+  i@(Inst e1 n)   -> do expandFill (ds, Just n) e1
+
+
+-- |Run unification returning a value in the Maybe monad.
+unify' :: Type -> Type -> Supply TyName (Maybe TySubst)
+unify' t1 t2 = errorToMaybe (unify t1 t2)
 
 
 -- |Lookup an expression in an environment, possibly fail.
