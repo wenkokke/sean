@@ -17,7 +17,6 @@ import Text.ParserCombinators.UU.BasicInstances (Parser)
 import Text.ParserCombinators.UU.Utils (runParser,pNatural)
 import Text.ParserCombinators.UU.Idioms (iI,Ii (..))
 import Text.Printf (printf)
-import System.IO (getContents)
 
 pDomainSize :: Parser Int
 pDomainSize = iI "domain_size" '=' pNatural Ii
