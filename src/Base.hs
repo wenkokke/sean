@@ -8,7 +8,7 @@ import Data.Map (Map,(!))
 import qualified Data.Map as M (lookup,fromList)
 import qualified Data.List as L (union)
 import qualified Data.String.Utils as S (join)
-import Text.Printf (printf)
+import Text.Printf (PrintfArg,printf)
 
 -- * Types and terms
 
@@ -45,11 +45,35 @@ data Expr where
   Set    :: [Expr] -> TyAnn -> Expr
   Hole   :: TyAnn -> Expr
   Plug   :: Expr -> Expr -> TyAnn -> Expr
-  deriving (Eq,Show)
+  deriving (Eq)
+
+showTyAnn :: PrintfArg a => a -> TyAnn -> String
+showTyAnn e Nothing  = printf "%s" e
+showTyAnn e (Just t) = printf "%s:%s" e (show t)
+
+instance Show Expr where
+  show expr = case expr of
+    (Var n t)    -> showTyAnn n t
+    (Abs n e _)  -> printf "\\%s.%s" n (show e)
+    (App f e _)  -> printf "%s %s" (show f) (showParens e)
+    (Obj x _)    -> printf "%d" x
+    (Set xs _)   -> printf "{%s}" (S.join "," $ map show xs)
+    (Hole t)     -> printf "_:%s" (show t)
+    (Plug e c _) -> printf "%s[%s]" (showParens c) (show e)
+    where
+      showParens e@(App {}) = printf "(%s)" (show e)
+      showParens e = show e
+
 
 data Decl where
   Decl   :: Name -> TyAnn -> Expr -> Decl
-  deriving (Eq,Show)
+  deriving (Eq)
+
+instance Show Decl where
+  show (Decl n Nothing e)  =
+    printf "%s = %s" n (show e)
+  show (Decl n (Just t) e) =
+    printf "%s : %s\n%s" n (show t) (show (Decl n Nothing e))
 
 
 

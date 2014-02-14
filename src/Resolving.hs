@@ -11,7 +11,7 @@ import Control.Monad (when)
 import Data.Char (isDigit,digitToInt)
 import Data.Either (lefts)
 import Data.Maybe (fromJust)
-import qualified Data.Map as M (insert)
+import qualified Data.Map as M (insert,lookup)
 import qualified Data.List as L (or)
 
 
@@ -84,6 +84,11 @@ labelSep = '#'
 ident :: Decl -> (Name , TyAnn)
 ident (Decl n t _) = (n , t)
 
+isPrim :: (Name , TyAnn) -> Bool
+isPrim (n , t1) = case M.lookup n stdTyEnv of
+  Nothing -> False
+  Just t2 -> compTyAnn t1 (Just t2)
+
 class FreeIdents e where
   freeIdents :: e -> [(Name , TyAnn)]
 
@@ -92,12 +97,15 @@ instance FreeIdents Decl where
 
 instance FreeIdents Expr where
   freeIdents (Var n t)      = [(n , t)]
-  freeIdents (Abs n1 e t1)  = filter (not . compatible (n1,t1)) (freeIdents e)
   freeIdents (App e1 e2 _)  = freeIdents e1 ++ freeIdents e2
   freeIdents (Set es _)     = concatMap freeIdents es
   freeIdents (Obj _ _)      = []
   freeIdents (Hole _)       = []
   freeIdents (Plug e c _)   = freeIdents e  ++ freeIdents c
+  freeIdents (Abs n1 e (Just (TyArr t1 _)))
+    = filter (not . compatible (n1,Just t1)) (freeIdents e)
+  freeIdents (Abs n1 e _)
+    = filter (not . compatible (n1,Nothing)) (freeIdents e)
 
 -- |Count number of equally named elements in the seen list.
 count :: Name -> [(Name,TyAnn)] -> Int
@@ -211,11 +219,11 @@ relabel i = joinLabel . second (++ [i]) . splitLabel
 
 compatible :: (Name , TyAnn) -> (Name , TyAnn) -> Bool
 compatible (n1 , t1) (n2 , t2) = n1 == n2 && compTyAnn t1 t2
-  where
-    compTyAnn :: TyAnn -> TyAnn -> Bool
-    compTyAnn  Nothing    _         = True
-    compTyAnn  _          Nothing   = True
-    compTyAnn (Just t1') (Just t2') = unifiable t1' t2'
+
+compTyAnn :: TyAnn -> TyAnn -> Bool
+compTyAnn  Nothing    _         = True
+compTyAnn  _          Nothing   = True
+compTyAnn (Just t1') (Just t2') = unifiable t1' t2'
 
 (><) :: TyAnn -> TyAnn -> TyAnn
 Nothing >< tyAnn = tyAnn

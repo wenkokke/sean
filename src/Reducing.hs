@@ -51,13 +51,14 @@ primEQUALS cont e1 e2 =
        _                   -> return (fun2 "EQUALS" r1 r2)
 
 primIOTA :: (Expr -> Error Expr) -> Size -> Expr -> Error Expr
-primIOTA cont size e =
-  do es <- mapM cont [ concretize o e | o <- [0 .. size - 1]]
+primIOTA k d iota@(App (Var "IOTA" _) e1 _) =
+  do es <- mapM k [ concretize o e1 | o <- [0 .. d - 1]]
      let is0 = zip [0 ..] es
      let is1 = filter (isTRUE . snd) is0
      case is1 of
+       [   ] -> return iota
        [ p ] -> return (obj (fst p))
-       _     -> fail ("IOTA: non-unique object for predicate, in " ++ show e)
+       _     -> fail ("IOTA: non-unique object for predicate, in " ++ show e1)
 
 rewriteOR :: Expr -> Expr -> Expr
 rewriteOR e1 e2 = fun1 "NOT" (fun2 "AND" (fun1 "NOT" e1) (fun1 "NOT" e2))
@@ -80,6 +81,11 @@ isTRUE :: Expr -> Bool
 isTRUE (Var "TRUE" _) = B.True
 isTRUE _ = B.False
 
+toBool :: Expr -> Maybe Bool
+toBool (Var "TRUE"  _) = Just B.True
+toBool (Var "FALSE" _) = Just B.False
+toBool _ = Nothing
+
 instance Reducible Expr where
   reduce env d = reduce'
     where
@@ -92,7 +98,7 @@ instance Reducible Expr where
       reduce' (App (App (Var "EQUIV" _) e1 _) e2 _)   = reduce' $ rewriteEQUIV e1 e2
       reduce' (App (Var "FORALL" _) e1 _)             = reduce' $ rewriteFORALL d e1
       reduce' (App (Var "EXISTS" _) e1 _)             = reduce' $ rewriteEXISTS d e1
-      reduce' (App (Var "IOTA" _) e1 _)               = primIOTA reduce' d e1
+      reduce' iota@(App (Var "IOTA" _) e1 _)          = primIOTA reduce' d iota
 
       -- Beta reduction
       reduce' (App (Abs n e2 _) e1 _) = reduce' (apply (Subst n e1) e2)
@@ -100,33 +106,33 @@ instance Reducible Expr where
       -- Charasteristic function application (set reduction)
       reduce' (App (Set es _) e _) = return (primBOOL (e `elem` es))
 
-      -- Call by name delayed reduction
+      -- Delayed reductions
       reduce' (App e1 e2 t) = do
         r1 <- reduce' e1
-        let a = App r1 e2 t
+        r2 <- reduce' e2
         case r1 of
-          Abs {} -> reduce' a
-          Set {} -> reduce' a
-          _      -> return  a
+          Abs {} -> reduce' (App r1 r2 t)
+          Set {} -> reduce' (App r1 r2 t)
+          _      -> return  (App r1 r2 t)
 
       -- Simple forwarding rules
       reduce' (Abs n e t)  = do e' <- reduce' e; return (Abs n e' t)
       reduce' v@(Var n _)  = case M.lookup n env of
         Just e' -> reduce' e'
-        Nothing -> return v
+        Nothing -> return  v
       reduce' o@(Obj _ _)  = return o
       reduce' (Set es t)   = do es' <- mapM reduce' es; return (Set es' t)
-      reduce' (Plug e c _) = do c' <- reduce' c; reduce' (plug e c')
+      reduce' (Plug e c _) = do c' <- reduce' c; e' <- reduce' e; reduce' (plug e' c')
       reduce' h@(Hole _)   = return h
 
 plug :: Expr -> Expr -> Expr
-plug _ v@(Var _ _)    = v
-plug _ o@(Obj _ _)    = o
-plug e (Abs x e1 t)   = Abs x (plug e e1) t
-plug e (App e1 e2 t)  = App (plug e e1) (plug e e2) t
-plug e (Set xs t)     = Set (map (plug e) xs) t
-plug e (Hole t)       = e
-plug _ p@(Plug _ _ _) = p
+plug _ v@(Var _ _)   = v
+plug _ o@(Obj _ _)   = o
+plug f (Abs x e1 t)  = Abs x (plug f e1) t
+plug f (App e1 e2 t) = App (plug f e1) (plug f e2) t
+plug f (Set xs t)    = Set (map (plug f) xs) t
+plug f (Hole _)      = f
+plug f (Plug e c t)  = Plug (plug f e) c t
 
 
 eval :: Size -> [Decl] -> Error (Env , TyEnv)

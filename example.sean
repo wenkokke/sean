@@ -1,0 +1,24 @@
+domain_size = 2
+
+noun_phrase = \A.A _:e
+
+noun_1      = _:et
+noun_2      = _:eet
+noun_2      = \P.\y.P (\x._:eet x y)
+
+and         = \A.\B.\x.A x /\ B x
+
+the         = \A.\B.B (ix.A x)
+some        = \A.\B.?x.A x /\ B x
+every       = \A.\B.!x.A x => B x
+
+verb_phrase = _:et
+
+verb_1      = _:et
+verb_2      = \P.\z.P (\x._:eet z x)
+verb_3      = \P.\Q.\z.P (\x.Q (\y._:eeet z x y))
+
+dog         = {0,1}
+ran         = {1}
+
+text        = some (noun_1[dog]) (verb_1[ran])
