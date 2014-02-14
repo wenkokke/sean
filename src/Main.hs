@@ -17,15 +17,14 @@ import Text.ParserCombinators.UU.BasicInstances (Parser)
 import Text.ParserCombinators.UU.Utils (runParser,pNatural)
 import Text.ParserCombinators.UU.Idioms (iI,Ii (..))
 import Text.Printf (printf)
-
-fileName   = "lexicon.sean"
+import System.IO (getContents)
 
 pDomainSize :: Parser Int
 pDomainSize = iI "domain_size" '=' pNatural Ii
 
 main :: IO ()
 main = do
-  file <- filter (not . null) . lines <$> readFile fileName
+  file <- filter (not . null) . lines <$> getContents
   let domain = runParser (head file) pDomainSize (head file)
   let result = run domain (tail file)
   let env    = fst . E.fromRight $ result
