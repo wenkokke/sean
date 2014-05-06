@@ -4,8 +4,8 @@ import Base (Name,Type (..),freeTypeVars)
 import Error (Error,isError)
 import Substitution (TySubst (..),apply)
 import Control.Applicative ((<$>))
-import Control.Monad.Error (mapErrorT)
 import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Except (mapExceptT)
 import Control.Monad.Supply (supply)
 import Text.Printf (PrintfArg,printf)
 
@@ -14,10 +14,10 @@ import Text.Printf (PrintfArg,printf)
 -- * Unification with context of expression
 
 unifyIn :: PrintfArg a => Type -> Type -> a -> Error [TySubst]
-unifyIn t1 t2 c = mapError (\e -> printf "%s in %s" e c) (unify t1 t2)
+unifyIn t1 t2 c = mapExcept (\e -> printf "%s in %s" e c) (unify t1 t2)
 
-mapError :: (String -> String) -> Error a -> Error a
-mapError f = mapErrorT (\s -> mapLeft f <$> s)
+mapExcept :: (String -> String) -> Error a -> Error a
+mapExcept f = mapExceptT (\s -> mapLeft f <$> s)
 
 mapLeft :: (a -> b) -> Either a c -> Either b c
 mapLeft f = either (Left . f) Right

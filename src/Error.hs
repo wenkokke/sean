@@ -1,17 +1,17 @@
 module Error where
 
 import Base (Name)
-import Control.Monad.Error (ErrorT,runErrorT)
+import Control.Monad.Trans.Except (ExceptT,runExceptT)
 import Control.Monad.Supply (Supply,evalSupply)
 
 type Message = String
-type Error a = ErrorT Message (Supply Name) a
+type Error a = ExceptT Message (Supply Name) a
 
 isError :: Error a -> Bool
 isError = either (const True) (const False) . supplyFreshNames
 
 supplyFreshNames :: Error a -> Either String a
-supplyFreshNames e = evalSupply (runErrorT e) freshNames
+supplyFreshNames e = evalSupply (runExceptT e) freshNames
 
 freshNames :: [Name]
 freshNames = letters ++ numbers

@@ -100,8 +100,11 @@ instance Reducible Expr where
       reduce' (App (Var "EXISTS" _) e1 _)             = reduce' $ rewriteEXISTS d e1
       reduce' iota@(App (Var "IOTA" _) e1 _)          = primIOTA reduce' d iota
 
-      -- Beta reduction
+      -- Beta reduction (TODO may be vulnerable to name capturing)
       reduce' (App (Abs n e2 _) e1 _) = reduce' (apply (Subst n e1) e2)
+
+      -- Delta reduction (TODO may be vulnerable to name capturing)
+      reduce' (App (Case n1 n2 e _) (Pair e1 e2 _) _) = reduce' (apply [Subst n1 e1, Subst n2 e2] e)
 
       -- Charasteristic function application (set reduction)
       reduce' (App (Set es _) e _) = return (primBOOL (e `elem` es))
@@ -116,23 +119,28 @@ instance Reducible Expr where
           _      -> return  (App r1 r2 t)
 
       -- Simple forwarding rules
-      reduce' (Abs n e t)  = do e' <- reduce' e; return (Abs n e' t)
-      reduce' v@(Var n _)  = case M.lookup n env of
+      reduce' (Abs n e t)    = do e' <- reduce' e; return (Abs n e' t)
+      reduce' v@(Var n _)    = case M.lookup n env of
         Just e' -> reduce' e'
         Nothing -> return  v
-      reduce' o@(Obj _ _)  = return o
-      reduce' (Set es t)   = do es' <- mapM reduce' es; return (Set es' t)
-      reduce' (Plug e c _) = do c' <- reduce' c; e' <- reduce' e; reduce' (plug e' c')
-      reduce' h@(Hole _)   = return h
+      reduce' (Pair e1 e2 t) = do e1' <- reduce' e1; e2' <- reduce' e2; return (Pair e1' e2' t)
+      reduce' (Case n1 n2 e t) = do e' <- reduce' e; return (Case n1 n2 e' t)
+      reduce' o@(Obj _ _)    = return o
+      reduce' (Set es t)     = do es' <- mapM reduce' es; return (Set es' t)
+      reduce' (Plug e c _)   = do c' <- reduce' c; e' <- reduce' e; reduce' (plug e' c')
+      reduce' h@(Hole _)     = return h
+
 
 plug :: Expr -> Expr -> Expr
-plug _ v@(Var _ _)   = v
-plug _ o@(Obj _ _)   = o
-plug f (Abs x e1 t)  = Abs x (plug f e1) t
-plug f (App e1 e2 t) = App (plug f e1) (plug f e2) t
-plug f (Set xs t)    = Set (map (plug f) xs) t
-plug f (Hole _)      = f
-plug f (Plug e c t)  = Plug (plug f e) c t
+plug _ v@(Var _ _)      = v
+plug f (Abs x e1 t)     = Abs x (plug f e1) t
+plug f (App e1 e2 t)    = App (plug f e1) (plug f e2) t
+plug f (Pair e1 e2 t)   = Pair (plug f e1) (plug f e2) t
+plug f (Case n1 n2 e t) = Case n1 n2 (plug f e) t
+plug _ o@(Obj _ _)      = o
+plug f (Set xs t)       = Set (map (plug f) xs) t
+plug f (Hole _)         = f
+plug f (Plug e c t)     = Plug (plug f e) c t
 
 
 eval :: Size -> [Decl] -> Error (Env , TyEnv)

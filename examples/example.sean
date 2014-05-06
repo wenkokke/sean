@@ -20,5 +20,6 @@ verb_3      = \P.\Q.\z.P (\x.Q (\y._:eeet z x y))
 
 dog         = {0,1}
 ran         = {1}
+gave        = {(0,1)}
 
 text        = some (noun_1[dog]) (verb_1[ran])

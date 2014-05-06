@@ -2,6 +2,7 @@
 
 module Parsing where
 
+import Prelude hiding (abs,fst,snd)
 import Base
 import Control.Applicative ((<$),(<$>),(<|>),(<*>))
 import Data.Foldable (asum)
@@ -23,6 +24,10 @@ holeName = "_"
 
 -- * Parsing
 
+-- ** Parsing the domain size
+
+pDomainSize :: Parser Int
+pDomainSize = iI "domain_size" '=' pNatural Ii
 
 -- ** Parsing types and type annotations
 
@@ -53,23 +58,21 @@ pAlphaNum_ = pLetter <|> pDigit <|> pSym '_'
 
 -- ** Parsing expressions
 
-pExpr :: Parser Expr
+pExpr,pVar,pPair,pCase,pObj,pSet :: Parser Expr
 pExpr = pBin
+pVar  = iI Var pName (pMaybe pTyAnn) Ii <?> "Variable"
+pPair = iI Pair '(' pExpr ',' pExpr ')' (pMaybe pTyAnn) Ii <?> "Tuple"
+pCase = iI Case '\\' '(' pName ',' pName ')' '.' pExpr (pMaybe pTyAnn) Ii <?> "Case"
+pObj  = iI Obj pNatural (pMaybe pTyAnn) Ii <?> "Object"
+pSet  = Set <$> pBraces (pList1Sep pComma pExpr) <*> pMaybe pTyAnn <?> "Set"
 
-pVar :: Parser Expr
-pVar = iI Var pName (pMaybe pTyAnn) Ii <?> "Variable"
-
-pObj :: Parser Expr
-pObj = iI Obj pNatural (pMaybe pTyAnn) Ii <?> "Object"
-
-pSet :: Parser Expr
-pSet = Set <$> pBraces (pList1Sep pComma pExpr) <*> pMaybe pTyAnn <?> "Set"
 
 pPlug :: Parser Expr
 pPlug = iI plug pName '[' pName (pMaybe pTyAnn) ']' Ii <?> "Plug"
   where
     plug :: Name -> Name -> TyAnn -> Expr
     plug c e t = Plug (Var e t) (var c) Nothing
+
 
 pGGQ :: Parser Expr
 pGGQ  = pAbs <|> pUniv <|> pExis <|> pIota
@@ -80,8 +83,11 @@ pGGQ  = pAbs <|> pUniv <|> pExis <|> pIota
     pIota = iI iota 'i'  pNames '.' pExpr Ii <?> "Iota"
 
 pExprAtom :: Parser Expr
-pExprAtom = pVar <|> pGGQ <|> pObj <|> pSet <|> pPlug <|> pHole
-            <|> (pParens pExpr <??> pOptTyAnn)
+pExprAtom = pVar <|> pGGQ
+          <|> pObj <|> pSet
+          <|> pPair <|> pCase
+          <|> pPlug <|> pHole <|>
+              (pParens pExpr <??> pOptTyAnn)
 
 pApp :: Parser Expr
 pApp = pChainl (app <$ pSpaces) pExprAtom

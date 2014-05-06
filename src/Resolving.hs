@@ -6,7 +6,7 @@ import Typing
 import Unification
 import Substitution
 import Control.Arrow (second)
-import Control.Applicative ((<$>),(<*>))
+import Control.Applicative ((<$>),(<*>),pure)
 import Control.Monad (when)
 import Data.Char (isDigit,digitToInt)
 import Data.Either (lefts)
@@ -96,12 +96,16 @@ instance FreeIdents Decl where
   freeIdents (Decl _ _ e) = freeIdents e
 
 instance FreeIdents Expr where
-  freeIdents (Var n t)      = [(n , t)]
-  freeIdents (App e1 e2 _)  = freeIdents e1 ++ freeIdents e2
-  freeIdents (Set es _)     = concatMap freeIdents es
-  freeIdents (Obj _ _)      = []
-  freeIdents (Hole _)       = []
-  freeIdents (Plug e c _)   = freeIdents e  ++ freeIdents c
+  freeIdents (Var n t)        = [(n , t)]
+  freeIdents (App e1 e2 _)    = freeIdents e1 ++ freeIdents e2
+  freeIdents (Pair e1 e2 _)   = freeIdents e1 ++ freeIdents e2
+  freeIdents (Case n1 n2 e _)
+    = filter (not . compatible (n1,Nothing))
+    . filter (not . compatible (n2,Nothing)) $ (freeIdents e)
+  freeIdents (Set es _)       = concatMap freeIdents es
+  freeIdents (Obj _ _)        = []
+  freeIdents (Hole _)         = []
+  freeIdents (Plug e c _)     = freeIdents e  ++ freeIdents c
   freeIdents (Abs n1 e (Just (TyArr t1 _)))
     = filter (not . compatible (n1,Just t1)) (freeIdents e)
   freeIdents (Abs n1 e _)
@@ -129,24 +133,36 @@ class Resolvable e where
 instance Resolvable Expr where
 
   -- resolution rules for lambda terms
-  resolve seen (App e1 e2 t) =
-    [ App e1' e2' t | e1' <- resolve seen e1 , e2' <- resolve seen e2 ]
-  resolve seen (Abs n e t) =
-    [ Abs n e' t | e' <- resolve bind e ]
-    where
-      bind = filter ((/=n) . fst) seen
   resolve seen (Var n1 t1) =
     [ Var n2 (t1 >< t2) | (n2,t2) <- resl ]
     where
       resl = if null comp then [(n1 , t1)] else comp
       comp = filter (compatible (n1 , t1)) poss
       poss = indexed n1 seen
-  resolve _ (Hole t) =
-    return (Hole t)
+
+  resolve seen (App e1 e2 t) =
+    [ App e1' e2' t | e1' <- resolve seen e1 , e2' <- resolve seen e2 ]
+  resolve seen (Abs n e t) =
+    [ Abs n e' t | e' <- resolve bind e ]
+    where
+      bind = filter ((/=n) . fst) seen
+
+  -- resolution rules for plugs and holes
+  resolve _    (Hole t) = return (Hole t)
+  resolve seen (Plug e c t) =
+    [ Plug e' c' t | e' <- resolve seen e , c' <- resolve seen c ]
 
   -- resolution rules for objects and sets
-  resolve _ o@(Obj _ _)   = return o
-  resolve seen (Set es t) = Set <$> mapM (resolve seen) es <*> return t
+  resolve _    o@(Obj _ _)   = return o
+  resolve seen (Set es t)    = Set <$> mapM (resolve seen) es <*> return t
+
+  -- resolution rules for pairs and cases
+  resolve seen (Pair e1 e2 t) =
+    [ Pair e1' e2' t | e1' <- resolve seen e1 , e2' <- resolve seen e2 ]
+  resolve seen (Case n1 n2 e t) =
+    [ Case n1 n2 e' t | e' <- resolve bind e ]
+    where
+      bind = filter ((/=n2) . fst) . filter ((/=n1) . fst) $ seen
 
 instance Resolvable Decl where
   resolve seen (Decl n t e) =

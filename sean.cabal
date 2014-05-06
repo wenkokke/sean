@@ -9,10 +9,32 @@ copyright:           (c) 2013 Pepijn Kokke
 category:            Language
 build-type:          Simple
 cabal-version:       >=1.8
+data-files:          examples/example.sean
 
 executable sean
-  main-is:        Main.hs
-  build-depends:  base >= 4.5, containers >= 0.5, monad-supply >= 0.4,
-                  mtl >= 2.1, uu-parsinglib >= 2.8, MissingH >= 1.2
-  hs-source-dirs: src
+  main-is:         Main.hs
+  build-depends:   base, containers, uu-parsinglib, monad-supply, mtl, transformers
+  hs-source-dirs:  src
 
+
+library
+  exposed-modules: Base, Parsing, Typing, Resolving, Reducing
+  ghc-options:     -fwarn-incomplete-patterns
+  build-depends:   base, containers, uu-parsinglib, monad-supply, mtl, transformers
+  hs-source-dirs:  src
+
+
+test-suite Reducing
+  type:            exitcode-stdio-1.0
+  main-is:         ReducingTests.hs
+  build-depends:   base, containers, uu-parsinglib, monad-supply, mtl, transformers
+  other-modules:   Paths_sean
+  hs-source-dirs:  src test
+
+
+test-suite Parsing
+  type:            exitcode-stdio-1.0
+  main-is:         ParsingTests.hs
+  build-depends:   base, containers, uu-parsinglib, monad-supply, mtl, transformers
+  other-modules:   Paths_sean
+  hs-source-dirs:  src test
