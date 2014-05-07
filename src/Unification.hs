@@ -5,7 +5,7 @@ import Error (Error,isError)
 import Substitution (TySubst (..),apply)
 import Control.Applicative ((<$>))
 import Control.Monad.Trans (lift)
-import Control.Monad.Trans.Except (mapExceptT)
+import Control.Monad.Trans.Except (mapExceptT,throwE)
 import Control.Monad.Supply (supply)
 import Text.Printf (PrintfArg,printf)
 
@@ -41,11 +41,11 @@ unifiable :: Type -> Type -> Bool
 unifiable t1 t2 = not (isError (unify t1 t2))
 
 cannotUnify :: (PrintfArg t1, PrintfArg t2) => t1 -> t2 -> Error a
-cannotUnify t1 t2 = fail (printf "Cannot unify %s and %s" t1 t2)
+cannotUnify t1 t2 = throwE (printf "Cannot unify %s and %s" t1 t2)
 
 occursCheck :: Name -> Type -> Error [TySubst]
 occursCheck n t
-  | n `occurs` t = fail (printf "%s occurs in %s" n (show t))
+  | n `occurs` t = throwE (printf "%s occurs in %s" n (show t))
   | otherwise    = return [TySubst n t]
 
 occurs :: Name -> Type -> Bool

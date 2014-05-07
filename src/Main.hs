@@ -5,7 +5,7 @@ import Text.Printf (printf)
 
 main :: IO ()
 main = do
-  result <- evalProg <$> getContents
+  result <- runProg <$> getContents
   case result of
     Right bool -> print bool
     Left missing -> do

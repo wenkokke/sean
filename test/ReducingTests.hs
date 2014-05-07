@@ -1,4 +1,4 @@
-import Sean (evalProg)
+import Sean (runProg)
 import Paths_sean (getDataFileName)
 import System.Exit (exitSuccess,exitFailure)
 import Text.ParserCombinators.UU.BasicInstances (Parser)
@@ -9,6 +9,6 @@ main :: IO ()
 main = do
      examplePath <- getDataFileName "examples/example.sean"
      example <- readFile examplePath
-     case evalProg example of
+     case runProg example of
           Right bool -> if bool then exitSuccess else exitFailure
           Left missing -> exitFailure

@@ -92,17 +92,21 @@ isPrim (n , t1) = case M.lookup n stdTyEnv of
 class FreeIdents e where
   freeIdents :: e -> [(Name , TyAnn)]
 
+instance (FreeIdents e1, FreeIdents e2) => FreeIdents (e1,e2) where
+  freeIdents (e1 , e2) = freeIdents e1 ++ freeIdents e2
+
+instance (FreeIdents e1, FreeIdents e2, FreeIdents e3) => FreeIdents (e1,e2,e3) where
+  freeIdents (e1 , e2 , e3) = freeIdents e1 ++ freeIdents e2 ++ freeIdents e3
+
 instance FreeIdents Decl where
   freeIdents (Decl _ _ e) = freeIdents e
 
 instance FreeIdents Expr where
   freeIdents (Var n t)        = [(n , t)]
   freeIdents (App e1 e2 _)    = freeIdents e1 ++ freeIdents e2
-  freeIdents (Pair e1 e2 _)   = freeIdents e1 ++ freeIdents e2
-  freeIdents (Case n1 n2 e _)
-    = filter (not . compatible (n1,Nothing))
-    . filter (not . compatible (n2,Nothing)) $ (freeIdents e)
-  freeIdents (Set es _)       = concatMap freeIdents es
+  freeIdents (Rel1 es _)      = concatMap freeIdents es
+  freeIdents (Rel2 es _)      = concatMap freeIdents es
+  freeIdents (Rel3 es _)      = concatMap freeIdents es
   freeIdents (Obj _ _)        = []
   freeIdents (Hole _)         = []
   freeIdents (Plug e c _)     = freeIdents e  ++ freeIdents c
@@ -130,6 +134,14 @@ indexed = indexed' []
 class Resolvable e where
   resolve :: [(Name,TyAnn)] -> e -> [e]
 
+instance (Resolvable e1, Resolvable e2) => Resolvable (e1,e2) where
+  resolve seen (e1,e2) =
+    [ (e1',e2') | e1' <- resolve seen e1 , e2' <- resolve seen e2 ]
+
+instance (Resolvable e1, Resolvable e2, Resolvable e3) => Resolvable (e1,e2,e3) where
+  resolve seen (e1,e2,e3) =
+    [ (e1',e2',e3') | e1' <- resolve seen e1 , e2' <- resolve seen e2 , e3' <- resolve seen e3 ]
+
 instance Resolvable Expr where
 
   -- resolution rules for lambda terms
@@ -154,15 +166,18 @@ instance Resolvable Expr where
 
   -- resolution rules for objects and sets
   resolve _    o@(Obj _ _)   = return o
-  resolve seen (Set es t)    = Set <$> mapM (resolve seen) es <*> return t
+  resolve seen (Rel1 es t)   = Rel1 <$> mapM (resolve seen) es <*> return t
+  resolve seen (Rel2 es t)   = Rel2 <$> mapM (resolve seen) es <*> return t
+  resolve seen (Rel3 es t)   = Rel3 <$> mapM (resolve seen) es <*> return t
+
 
   -- resolution rules for pairs and cases
-  resolve seen (Pair e1 e2 t) =
-    [ Pair e1' e2' t | e1' <- resolve seen e1 , e2' <- resolve seen e2 ]
-  resolve seen (Case n1 n2 e t) =
-    [ Case n1 n2 e' t | e' <- resolve bind e ]
-    where
-      bind = filter ((/=n2) . fst) . filter ((/=n1) . fst) $ seen
+  -- resolve seen (Pair e1 e2 t) =
+  --   [ Pair e1' e2' t | e1' <- resolve seen e1 , e2' <- resolve seen e2 ]
+  -- resolve seen (Case n1 n2 e t) =
+  --   [ Case n1 n2 e' t | e' <- resolve bind e ]
+  --   where
+  --     bind = filter ((/=n2) . fst) . filter ((/=n1) . fst) $ seen
 
 instance Resolvable Decl where
   resolve seen (Decl n t e) =

@@ -15,6 +15,15 @@ instance (Apply f a) => Apply [f] a where
   apply [] = id
   apply (f : fs) = apply f . apply fs
 
+instance (Apply f a1, Apply f a2) => Apply f (a1 , a2) where
+  apply f (x1 , x2) = (apply f x1 , apply f x2)
+
+instance (Apply f a1, Apply f a2 , Apply f a3) => Apply f (a1 , a2 , a3) where
+  apply f (x1 , x2 , x3) = (apply f x1 , apply f x2 , apply f x3)
+
+instance (Apply f a) => Apply f [a] where
+  apply f [] = []
+  apply f (x : xs) = apply f x : apply f xs
 
 
 -- * Type substitutions
@@ -36,10 +45,10 @@ instance Apply TySubst Expr where
   apply s (Var n t)        = Var n (apply s t)
   apply s (Abs n e t)      = Abs n (apply s e) (apply s t)
   apply s (App e1 e2 t)    = App (apply s e1) (apply s e2) (apply s t)
-  apply s (Pair e1 e2 t)   = Pair (apply s e1) (apply s e2) (apply s t)
-  apply s (Case n1 n2 e t) = Case n1 n2 (apply s e) (apply s t)
   apply s (Obj i t)        = Obj i (apply s t)
-  apply s (Set es t)       = Set (map (apply s) es) (apply s t)
+  apply s (Rel1 es t)      = Rel1 (apply s es) (apply s t)
+  apply s (Rel2 es t)      = Rel2 (apply s es) (apply s t)
+  apply s (Rel3 es t)      = Rel3 (apply s es) (apply s t)
   apply s (Plug c e t)     = Plug (apply s c) (apply s e) (apply s t)
   apply s (Hole t)         = Hole (apply s t)
 
@@ -59,9 +68,9 @@ instance Apply Subst Expr where
       subst v@(Var n2 _)       = if n1 == n2 then r else v
       subst a@(Abs n2 e t)     = if n1 == n2 then a else Abs n2 (subst e) t
       subst (App e1 e2 t)      = App (subst e1) (subst e2) t
-      subst (Pair e1 e2 t)     = Pair (subst e1) (subst e2) t
-      subst c@(Case n2 n3 e t) = if n1 == n2 || n1 == n3 then c else Case n2 n3 (subst e) t
       subst o@(Obj _ _)        = o
-      subst (Set es t)         = Set (map subst es) t
+      subst (Rel1 es t)        = Rel1 (apply s es) t
+      subst (Rel2 es t)        = Rel2 (apply s es) t
+      subst (Rel3 es t)        = Rel3 (apply s es) t
       subst (Plug e c t)       = Plug (subst e) (apply s c) t
       subst h@(Hole _)         = h

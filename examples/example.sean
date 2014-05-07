@@ -18,8 +18,14 @@ verb_1      = _:et
 verb_2      = \P.\z.P (\x._:eet z x)
 verb_3      = \P.\Q.\z.P (\x.Q (\y._:eeet z x y))
 
+james       = 0
 dog         = {0,1}
+female      = {1}
+bitch       = \x.female x /\ dog x
 ran         = {1}
-gave        = {(0,1)}
+liked       = {(0,1)}
 
-text        = some (noun_1[dog]) (verb_1[ran])
+text        = some (noun_1 [ dog ]) ( (verb_2 [ likes ]) (every (noun_1 [ bitch ])) )
+test        = noun_phrase [ james ] 
+
+dog(x) -> animal(x)
