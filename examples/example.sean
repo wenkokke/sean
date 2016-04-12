@@ -19,13 +19,15 @@ verb_2      = \P.\z.P (\x._:eet z x)
 verb_3      = \P.\Q.\z.P (\x.Q (\y._:eeet z x y))
 
 james       = 0
-dog         = {0,1}
+chicken     = {0,1}
+male        = {0}
 female      = {1}
-bitch       = \x.female x /\ dog x
+rooster     = \x.male x /\ chicken x
+hen         = \x.female x /\ chicken x
 ran         = {1}
 liked       = {(0,1)}
 
-text        = some (noun_1 [ dog ]) ( (verb_2 [ likes ]) (every (noun_1 [ bitch ])) )
+text        = some (noun_1 [ rooster ]) ( (verb_2 [ likes ]) (every (noun_1 [ hen ])) )
 test        = noun_phrase [ james ] 
 
-dog(x) -> animal(x)
+chicken(x) -> animal(x)
