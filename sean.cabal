@@ -3,9 +3,9 @@ version:             0.1.0.0
 synopsis:            Compiler for simple semantic annotation language
 license:             AllRightsReserved
 license-file:        LICENSE
-author:              Pepijn Kokke
-maintainer:          pepijn.kokke@gmail.com
-copyright:           (c) 2013 Pepijn Kokke
+author:              Wen Kokke
+maintainer:          wen.kokke@gmail.com
+copyright:           (c) 2013 Wen Kokke
 category:            Language
 build-type:          Simple
 cabal-version:       >=1.8
